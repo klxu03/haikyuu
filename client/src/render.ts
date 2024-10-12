@@ -1,4 +1,7 @@
 import * as THREE from "three";
+import Camera from "./utils/camera/camera";
+import AssetManager from "./assets/assetManager";
+import initLights from "./utils/initLights";
 
 class Renderer {
     static #instance: Renderer;
@@ -9,6 +12,8 @@ class Renderer {
 
     #cube: THREE.Mesh;
 
+    #assetManager: AssetManager;
+
     constructor() {
         Renderer.#instance = this;
         this.#gameWindow = document.getElementById("render-target")!;
@@ -18,8 +23,7 @@ class Renderer {
         this.#renderer.setClearColor(0x000000, 0);
         this.#gameWindow.appendChild(this.#renderer.domElement);
 
-        this.#camera = new THREE.PerspectiveCamera(75, this.#gameWindow.offsetWidth / this.#gameWindow.offsetHeight, 0.1, 1000);
-        this.#camera.position.z = 5;
+        this.#camera = Camera.getInstance.cameraInstance.camera;
 
         this.#renderer.setAnimationLoop(this.#animate.bind(this));
 
@@ -27,12 +31,23 @@ class Renderer {
             event.preventDefault();
         }, false);
 
-        this.#cube = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({color: 0x00ff00}));
+        this.#cube = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshBasicMaterial({color: 0x00ff00}));
         this.#init();
+
+        this.#assetManager = AssetManager.getInstance;
+        initLights();
     }
 
     #init() {
         this.scene.add(this.#cube);
+
+        // wait 2 seconds before adding the volleyball court
+        setTimeout(() => {
+            const mesh = this.#assetManager.getMesh("volleyballCourt").clone();
+            console.log("Adding volleyball court", mesh);
+            mesh.position.set(137, -1, -0.8);
+            this.scene.add(mesh);
+        }, 2000);
     }
 
     #animate() {
