@@ -1,6 +1,47 @@
 {
     "volleyballCourt": {
         "url": "/models/volleyball_court.glb",
+        "type": "mesh",
+        "options": {}
+    },
+    "armature": {
+        "url": "/models/armature.glb",
+        "type": "avatar",
+        "options": {}
+    },
+    "head1": {
+        "url": "/models/head1.glb",
+        "type": "asset",
+        "options": {}
+    },
+    "hair1": {
+        "url": "/models/hair1.glb",
+        "type": "asset",
+        "options": {}
+    },
+    "eyes1": {
+        "url": "/models/eyes1.glb",
+        "type": "asset",
+        "options": {}
+    },
+    "nose1": {
+        "url": "/models/nose1.glb",
+        "type": "asset",
+        "options": {}
+    },
+    "top1": {
+        "url": "/models/top1.glb",
+        "type": "asset",
+        "options": {}
+    },
+    "bottom1": {
+        "url": "/models/bottom1.glb",
+        "type": "asset",
+        "options": {}
+    },
+    "shoes2": {
+        "url": "/models/shoes2.glb",
+        "type": "asset",
         "options": {}
     }
 }

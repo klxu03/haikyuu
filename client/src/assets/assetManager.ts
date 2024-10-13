@@ -1,6 +1,8 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { GLTF, GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader';
 import models from './models.json';
+import Renderer from "../render";
 
 type ModelOptions = {
     recieveShadow?: boolean;
@@ -9,24 +11,36 @@ type ModelOptions = {
     scale?: number;
 }
 
+interface GLTFResult extends GLTF {
+    scene: THREE.Group;
+    nodes?: { [key: string]: THREE.Object3D };
+    materials?: { [key: string]: THREE.Material };
+}
+
 class AssetManager {
     static #instance: AssetManager;
     #glbLoader: GLTFLoader;
+    #fbxLoader: FBXLoader;
     #textureLoader: THREE.TextureLoader;
 
     public textures: Map<string, THREE.Texture>;
 
-    #meshFactory: Map<string, THREE.Object3D>;
+    #meshFactory: Map<string, GLTFResult>;
+    #renderer: Renderer;
+
+    readonly #playerScale = 0.65;
 
     constructor() {
         AssetManager.#instance = this;
+        this.#renderer = Renderer.getInstance;
         this.#glbLoader = new GLTFLoader();
+        this.#fbxLoader = new FBXLoader();
         this.#textureLoader = new THREE.TextureLoader();
 
         this.textures = new Map<string, THREE.Texture>();
         this.#initTextures();
 
-        this.#meshFactory = new Map<string, THREE.Object3D>();
+        this.#meshFactory = new Map<string, GLTFResult>();
     }
 
     #loadTexture(url: string) {
@@ -47,35 +61,68 @@ class AssetManager {
         this.textures.set("specular", this.#loadTexture("/textures/specular.png"));
     }
 
-    async #loadModel(name: string, url: string, options: ModelOptions) {
+    async #loadModel(name: string, url: string, options: ModelOptions, type: string) {
         const recieveShadow = options.recieveShadow ?? true;
         const castShadow = options.castShadow ?? true;
         const rotation = options.rotation ?? 0;
         const scale = options.scale ?? 1;
 
-        const glb = await this.#glbLoader.loadAsync(url);
+        const glb: GLTFResult = await this.#glbLoader.loadAsync(url);
 
-        let mesh = glb.scene;
+        if (type === "mesh") {
+            let scene = glb.scene;
 
-        mesh.traverse((obj: THREE.Mesh) => {
-            if (obj instanceof THREE.Mesh) {
-            //     obj.material = new THREE.MeshLambertMaterial({
-            //         map: this.textures.get("base"),
-            //         specularMap: this.textures.get("specular"),
-            //     })
+            scene.traverse((obj: THREE.Object3D) => {
+                if (obj instanceof THREE.Mesh) {
+                    obj.receiveShadow = recieveShadow;
+                    obj.castShadow = castShadow;
+                }
+            });
 
-                obj.receiveShadow = recieveShadow;
-                obj.castShadow = castShadow;
+            scene.rotation.set(0, THREE.MathUtils.degToRad(rotation), 0);
+            scene.scale.set(scale, scale, scale);
+
+            scene.name = name;
+
+            console.log("finished loading model", name, "mesh is ", scene);
+            this.#meshFactory.set(name, glb);
+        } else if (type === "avatar") {
+            const processed = this.#processAvatar(glb);
+            processed.scene.scale.set(this.#playerScale, this.#playerScale, this.#playerScale);
+
+            console.log("finished loading model", name, "avatar is ", processed);
+            this.#meshFactory.set(name, processed);
+        } else {
+            console.log("finished loading model", name, "glb is ", glb);
+            glb.scene.scale.set(this.#playerScale, this.#playerScale, this.#playerScale);
+
+            this.#meshFactory.set(name, glb);
+        }
+    }
+
+    #processAvatar(gltf: GLTF): GLTFResult {
+        const nodes: { [key: string]: THREE.Object3D } = {};
+        const materials: { [key: string]: THREE.Material } = {};
+
+        gltf.scene.traverse((obj: THREE.Object3D) => {
+            if (obj.name) {
+                nodes[obj.name] = obj;
             }
 
-            mesh.rotation.set(0, THREE.MathUtils.degToRad(rotation), 0);
-            mesh.scale.set(scale, scale, scale);
-        })
+            if (obj instanceof THREE.Mesh) {
+                if (Array.isArray(obj.material)) {
+                    obj.material.forEach((material) => {
+                        if (material.name) {
+                            materials[material.name] = material;
+                        }
+                    });
+                } else if (obj.material.name) {
+                    materials[obj.material.name] = obj.material;
+                }
+            }
+        });
 
-        mesh.name = name;
-
-        console.log("finished loading model", name, "mesh is ", mesh);
-        this.#meshFactory.set(name, mesh);
+        return { ...gltf, nodes, materials };
     }
 
     /**
@@ -84,28 +131,67 @@ class AssetManager {
    */
     public async initModels(): Promise<boolean> {
         for (const [key, value] of Object.entries(models)) {
-            await this.#loadModel(key, value.url, value.options);
+            await this.#loadModel(key, value.url, value.options, value.type);
         }
 
         return true;
     }
 
-    public getMesh(id: string): THREE.Object3D {
+    #getPlayerObject(): GLTFResult {
+        /*
+        const size = 1;
+        const geometry = new THREE.BoxGeometry(size, size, size);
+        // Create a mesh where it has a red face in the front, and green faces for the rest
+        const materials = [
+            new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
+            new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
+            new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
+            new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
+            new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
+            new THREE.MeshBasicMaterial({ color: 0xff0000 }),
+        ]
+        const cube = new THREE.Mesh(geometry, materials);
+        cube.position.set(0, size/2, 0);
+        return cube;
+        */
+
+        // nodes.Plane.skeleton is the skeleton
+        const armature = this.#meshFactory.get("armature")!;
+        this.#renderer.scene.add(armature.scene);
+
+        const skinnedMesh = armature.nodes!.Plane as THREE.SkinnedMesh;
+        const skeleton = skinnedMesh.skeleton as THREE.Skeleton;
+
+        const assets = ["head1", "hair1", "eyes1", "nose1", "top1", "bottom1", "shoes2"];
+
+        assets.forEach((asset) => {
+            const model = this.#meshFactory.get(asset)!;
+            let scene = model.scene;
+
+            const group = new THREE.Group();
+
+            scene.traverse((child: THREE.Object3D) => {
+                if (child instanceof THREE.Mesh) {
+                    const skinnedMesh = new THREE.SkinnedMesh(child.geometry, child.material);
+                    skinnedMesh.castShadow = true;
+                    skinnedMesh.receiveShadow = true;
+
+                    skinnedMesh.bind(skeleton);
+                    group.add(skinnedMesh);
+                }
+            });
+
+            this.#renderer.scene.add(group);
+        })
+
+        skeleton.update();
+
+        return armature;
+    }
+
+    public getGLTF(id: string): GLTFResult {
         if (id === "player") {
-            const size = 1;
-            const geometry = new THREE.BoxGeometry(size, size, size);
-            // Create a mesh where it has a red face in the front, and green faces for the rest
-            const materials = [
-                new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
-                new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
-                new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
-                new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
-                new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
-                new THREE.MeshBasicMaterial({ color: 0xff0000 }),
-            ]
-            const cube = new THREE.Mesh(geometry, materials);
-            cube.position.set(0, size/2, 0);
-            return cube;
+            return this.#getPlayerObject();
         }
 
         return this.#meshFactory.get(id)!;
@@ -117,3 +203,4 @@ class AssetManager {
 }
 
 export default AssetManager;
+export type { GLTFResult };

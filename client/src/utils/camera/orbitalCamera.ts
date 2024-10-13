@@ -52,8 +52,6 @@ class OrbitalCamera {
         this.camera.position.add(this.origin);
         this.camera.lookAt(this.origin);
         this.camera.updateMatrix();
-
-        console.log("camera position", this.camera.position);
     }
 
     handleRotation(dX: number, dY: number) {

@@ -12,7 +12,7 @@ class Renderer {
     #gameWindow: HTMLElement;
 
     #assetManager: AssetManager;
-    #entityManager: EntityManager;
+    #entityManager!: EntityManager;
 
     constructor() {
         Renderer.#instance = this;
@@ -25,15 +25,12 @@ class Renderer {
 
         this.#camera = (new Camera()).cameraInstance.camera;
 
-        this.#renderer.setAnimationLoop(this.#animate.bind(this));
-
         window.addEventListener("contextmenu", (event) => {
             event.preventDefault();
         }, false);
 
         // Initialize singletons
         this.#assetManager = new AssetManager();
-        this.#entityManager = new EntityManager();
 
         this.#init();
         initLights();
@@ -41,16 +38,13 @@ class Renderer {
 
     async #init() {
         await this.#assetManager.initModels();
+        this.#entityManager = new EntityManager();
 
-        const mesh = this.#assetManager.getMesh("volleyballCourt").clone();
+        const mesh = this.#assetManager.getGLTF("volleyballCourt").scene.clone();
         mesh.position.set(136, 0, -0.4);
         this.scene.add(mesh);
 
-        this.scene.add(this.#entityManager.mainPlayer.mesh);
-        setTimeout(() => {
-            console.log("Setting player position");
-            this.#entityManager.mainPlayer.updatePositionDeltas({ z: 3 });
-        }, 2000);
+        this.#renderer.setAnimationLoop(this.#animate.bind(this));
     }
 
     #animate() {

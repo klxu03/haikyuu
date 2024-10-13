@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import AssetManager from "../assets/assetManager";
 import { InputManager } from "../input";
+import type { GLTFResult } from "../assets/assetManager";
 
 interface Position {
     x: number;
@@ -15,7 +16,7 @@ interface UpdatePosition {
 }
 
 class Player {
-    public mesh: THREE.Mesh;
+    public gltfResult: GLTFResult;
 
     #inputManager: InputManager;
 
@@ -23,12 +24,12 @@ class Player {
     readonly #jumpSpeed = this.#moveSpeed * 2;
     readonly #fallSpeed = this.#moveSpeed * 4;
 
-    readonly #groundHeight = 0.5;
+    readonly #groundHeight = 0;
 
     public position: Position = { x: 0, y: this.#groundHeight, z: 0 };
 
     constructor() {
-        this.mesh = AssetManager.getInstance.getMesh("player") as THREE.Mesh;
+        this.gltfResult = AssetManager.getInstance.getGLTF("player");
         this.#inputManager = InputManager.getInstance;
     }
 
@@ -57,8 +58,8 @@ class Player {
 
         // Calculate rotation based on movement direction
         if (moveX !== 0 || moveZ !== 0) {
-            const angle = Math.atan2(-moveX, -moveZ);
-            this.mesh.rotation.y = angle;
+            const angle = Math.atan2(moveX, moveZ);
+            this.gltfResult.scene.rotation.y = angle;
         }
 
         // Handle space key
@@ -72,7 +73,7 @@ class Player {
             }
         }
 
-        this.mesh.position.set(this.position.x, this.position.y, this.position.z);
+        this.gltfResult.scene.position.set(this.position.x, this.position.y, this.position.z);
     }
 
     /**
@@ -86,7 +87,7 @@ class Player {
         if (position.z !== undefined) this.position.z += position.z;
         console.log("updated position", this.position);
 
-        this.mesh.position.set(this.position.x, this.position.y, this.position.z);
+        this.gltfResult.scene.position.set(this.position.x, this.position.y, this.position.z);
     }
 }
 
