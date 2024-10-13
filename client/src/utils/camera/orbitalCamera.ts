@@ -4,6 +4,8 @@ const DEG2RAD = Math.PI / 180;
 
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
+// set up default camera positions so x = 0, y = 6.5, and z = 11
+
 const CAMERA_CONFIG = {
     MIN_CAMERA_RADIUS: 5,
     MAX_CAMERA_RADIUS: 20,
@@ -15,10 +17,16 @@ const CAMERA_CONFIG = {
 };
 
 const CAMERA_DEFAULT = {
-    RADIUS: (CAMERA_CONFIG.MAX_CAMERA_RADIUS + CAMERA_CONFIG.MIN_CAMERA_RADIUS) / 2,
-    AZIMUTH: 135,
-    ELEVATION: 45,
+    RADIUS: 0,
+    AZIMUTH: 0,
+    ELEVATION: 0,
 };
+const x_0 = 0;
+const y_0 = 5.27;
+const z_0 = 9.56;
+CAMERA_DEFAULT.RADIUS = Math.sqrt(x_0 ** 2 + y_0 ** 2 + z_0 ** 2);
+CAMERA_DEFAULT.AZIMUTH = Math.atan2(x_0, z_0) * (180 / Math.PI);
+CAMERA_DEFAULT.ELEVATION = Math.asin(y_0 / CAMERA_DEFAULT.RADIUS) * (180 / Math.PI);
 
 class OrbitalCamera {
     public camera: THREE.PerspectiveCamera;
@@ -44,6 +52,8 @@ class OrbitalCamera {
         this.camera.position.add(this.origin);
         this.camera.lookAt(this.origin);
         this.camera.updateMatrix();
+
+        console.log("camera position", this.camera.position);
     }
 
     handleRotation(dX: number, dY: number) {
