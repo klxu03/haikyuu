@@ -8,15 +8,16 @@ class Camera {
     #prevMouseY: number = 0;
     #inputManager: InputManager;
 
-    private constructor(gameWindow: HTMLElement) {
+    constructor() {
         // TODO: Possibly introduce VR camera support here
+        Camera.#instance = this;
+
+        const gameWindow = document.getElementById('render-target')!;
         this.cameraInstance = new OrbitalCamera(gameWindow);
         this.#inputManager = InputManager.getInstance;
-        window.addEventListener("mousemove", this.#onMouseMove.bind(this));
-        window.addEventListener("wheel", this.#onScroll.bind(this));
     }
 
-    #onMouseMove(event: MouseEvent) {
+    public onMouseMove(event: MouseEvent) {
         const dX = event.clientX - this.#prevMouseX;
         const dY = event.clientY - this.#prevMouseY;
 
@@ -37,15 +38,11 @@ class Camera {
         }
     }
 
-    #onScroll(event: WheelEvent) {
+    public onScroll(event: WheelEvent) {
         this.cameraInstance.handleZoom(event.deltaY);
     }
 
     public static get getInstance(): Camera {
-        if (!Camera.#instance) {
-            const gameWindow = document.getElementById('render-target')!;
-            Camera.#instance = new Camera(gameWindow);
-        }
         return Camera.#instance;
     }
 }

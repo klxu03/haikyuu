@@ -27,7 +27,6 @@ class AssetManager {
         this.#initTextures();
 
         this.#meshFactory = new Map<string, THREE.Object3D>();
-        this.initModels();
     }
 
     #loadTexture(url: string) {
@@ -92,14 +91,27 @@ class AssetManager {
     }
 
     public getMesh(id: string): THREE.Object3D {
+        if (id === "player") {
+            const size = 1;
+            const geometry = new THREE.BoxGeometry(size, size, size);
+            // Create a mesh where it has a red face in the front, and green faces for the rest
+            const materials = [
+                new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
+                new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
+                new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
+                new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
+                new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
+                new THREE.MeshBasicMaterial({ color: 0xff0000 }),
+            ]
+            const cube = new THREE.Mesh(geometry, materials);
+            cube.position.set(0, size/2, 0);
+            return cube;
+        }
+
         return this.#meshFactory.get(id)!;
     }
 
     public static get getInstance(): AssetManager {
-        if (!AssetManager.#instance) {
-            AssetManager.#instance = new AssetManager();
-        }
-
         return AssetManager.#instance;
     }
 }

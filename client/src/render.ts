@@ -2,6 +2,7 @@ import * as THREE from "three";
 import Camera from "./utils/camera/camera";
 import AssetManager from "./assets/assetManager";
 import initLights from "./utils/initLights";
+import EntityManager from "./entities/entityManager";
 
 class Renderer {
     static #instance: Renderer;
@@ -10,9 +11,8 @@ class Renderer {
     #camera: THREE.PerspectiveCamera;
     #gameWindow: HTMLElement;
 
-    #cube: THREE.Mesh;
-
     #assetManager: AssetManager;
+    #entityManager: EntityManager;
 
     constructor() {
         Renderer.#instance = this;
@@ -23,7 +23,7 @@ class Renderer {
         this.#renderer.setClearColor(0x000000, 0);
         this.#gameWindow.appendChild(this.#renderer.domElement);
 
-        this.#camera = Camera.getInstance.cameraInstance.camera;
+        this.#camera = (new Camera()).cameraInstance.camera;
 
         this.#renderer.setAnimationLoop(this.#animate.bind(this));
 
@@ -31,30 +31,30 @@ class Renderer {
             event.preventDefault();
         }, false);
 
-        this.#cube = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshBasicMaterial({color: 0x00ff00}));
-        this.#init();
+        // Initialize singletons
+        this.#assetManager = new AssetManager();
+        this.#entityManager = new EntityManager();
 
-        this.#assetManager = AssetManager.getInstance;
+        this.#init();
         initLights();
     }
 
-    #init() {
-        this.scene.add(this.#cube);
+    async #init() {
+        await this.#assetManager.initModels();
 
-        // wait 2 seconds before adding the volleyball court
+        const mesh = this.#assetManager.getMesh("volleyballCourt").clone();
+        mesh.position.set(136, 0, -0.4);
+        this.scene.add(mesh);
+
+        this.scene.add(this.#entityManager.mainPlayer.mesh);
         setTimeout(() => {
-            const mesh = this.#assetManager.getMesh("volleyballCourt").clone();
-            console.log("Adding volleyball court", mesh);
-            mesh.position.set(137, -1, -0.8);
-            this.scene.add(mesh);
+            console.log("Setting player position");
+            this.#entityManager.mainPlayer.updatePositionDeltas({ z: 3 });
         }, 2000);
     }
 
     #animate() {
-        this.#cube.rotation.x += 0.01;
-        this.#cube.rotation.y += 0.01;
-        this.#cube.rotation.z += 0.01;
-
+        this.#entityManager.mainPlayer.update();
         this.#renderer.render(this.scene, this.#camera);
     }
 
