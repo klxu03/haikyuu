@@ -15,6 +15,10 @@ class EntityManager {
     public static get getInstance(): EntityManager {
         return EntityManager.#instance;
     }
+
+    public update(deltaTime: number) {
+        this.mainPlayer.update(deltaTime);
+    }
 }
 
 export default EntityManager;

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTF, GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader';
 import models from './models.json';
+import animations from './animations.json';
 import Renderer from "../render";
 
 type ModelOptions = {
@@ -20,13 +21,13 @@ interface GLTFResult extends GLTF {
 class AssetManager {
     static #instance: AssetManager;
     #glbLoader: GLTFLoader;
-    #fbxLoader: FBXLoader;
     #textureLoader: THREE.TextureLoader;
 
     public textures: Map<string, THREE.Texture>;
 
     #meshFactory: Map<string, GLTFResult>;
     #renderer: Renderer;
+    public animations: Map<string, THREE.AnimationClip>;
 
     readonly #playerScale = 0.65;
 
@@ -34,13 +35,14 @@ class AssetManager {
         AssetManager.#instance = this;
         this.#renderer = Renderer.getInstance;
         this.#glbLoader = new GLTFLoader();
-        this.#fbxLoader = new FBXLoader();
         this.#textureLoader = new THREE.TextureLoader();
 
         this.textures = new Map<string, THREE.Texture>();
         this.#initTextures();
 
         this.#meshFactory = new Map<string, GLTFResult>();
+
+        this.animations = new Map<string, THREE.AnimationClip>();
     }
 
     #loadTexture(url: string) {
@@ -100,6 +102,21 @@ class AssetManager {
         }
     }
 
+    async #loadAnimation(name: string, url: string) {
+        try {
+            const glb = await this.#glbLoader.loadAsync(url);
+            const animation = glb.animations[0];
+            if (animation) {
+                this.animations.set(name, animation);
+                console.log(`Animation '${name}' loaded successfully`);
+            } else {
+                console.warn(`No animation found in the GLB animation file: ${url}`);
+            }
+        } catch (error) {
+            console.error(`Error loading animation '${name}':`, error);
+        }
+    }
+
     #processAvatar(gltf: GLTF): GLTFResult {
         const nodes: { [key: string]: THREE.Object3D } = {};
         const materials: { [key: string]: THREE.Material } = {};
@@ -134,28 +151,14 @@ class AssetManager {
             await this.#loadModel(key, value.url, value.options, value.type);
         }
 
+        for (const [key, value] of Object.entries(animations)) {
+            await this.#loadAnimation(key, value.url);
+        }
+
         return true;
     }
 
     #getPlayerObject(): GLTFResult {
-        /*
-        const size = 1;
-        const geometry = new THREE.BoxGeometry(size, size, size);
-        // Create a mesh where it has a red face in the front, and green faces for the rest
-        const materials = [
-            new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
-            new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
-            new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
-            new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
-            new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
-            new THREE.MeshBasicMaterial({ color: 0xff0000 }),
-        ]
-        const cube = new THREE.Mesh(geometry, materials);
-        cube.position.set(0, size/2, 0);
-        return cube;
-        */
-
-        // nodes.Plane.skeleton is the skeleton
         const armature = this.#meshFactory.get("armature")!;
         this.#renderer.scene.add(armature.scene);
 

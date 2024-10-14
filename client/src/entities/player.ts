@@ -28,13 +28,24 @@ class Player {
 
     public position: Position = { x: 0, y: this.#groundHeight, z: 0 };
 
+    #assetManager: AssetManager;
+    #animationMixer: THREE.AnimationMixer;
+
     constructor() {
         this.gltfResult = AssetManager.getInstance.getGLTF("player");
         this.#inputManager = InputManager.getInstance;
+
+        this.#assetManager = AssetManager.getInstance;
+        this.#animationMixer = new THREE.AnimationMixer(this.gltfResult.scene);
     }
 
-    public update() {
+    /**
+     * Update the player's position and animations
+     * @param deltaTime The time since the last update
+     */
+    public update(deltaTime: number) {
         this.#handleMovement();
+        this.#updateAnimations(deltaTime);
     }
 
     #handleMovement() {
@@ -64,6 +75,7 @@ class Player {
 
         // Handle space key
         if (this.#inputManager.keysPressed.space) {
+            this.#playAnimation("jump");
             this.updatePositionDeltas({ y: this.#jumpSpeed });
         } else if (this.position.y > this.#groundHeight) {
             if (this.position.y - this.#groundHeight <= this.#fallSpeed) {
@@ -88,6 +100,23 @@ class Player {
         console.log("updated position", this.position);
 
         this.gltfResult.scene.position.set(this.position.x, this.position.y, this.position.z);
+    }
+
+    #playAnimation(name: string) {
+        if (this.#animationMixer && this.#assetManager.animations.has(name)) {
+            const animation = this.#assetManager.animations.get(name)!;
+            const action = this.#animationMixer.clipAction(animation);
+            action.play();
+            console.log(`Playing animation: ${name}`);
+        } else {
+            console.warn(`Animation '${name}' not found or animation mixer not initialized`);
+        }
+    }
+
+    #updateAnimations(deltaTime: number) {
+        if (this.#animationMixer) {
+            this.#animationMixer.update(deltaTime);
+        }
     }
 }
 

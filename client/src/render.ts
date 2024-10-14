@@ -14,6 +14,8 @@ class Renderer {
     #assetManager: AssetManager;
     #entityManager!: EntityManager;
 
+    #clock: THREE.Clock;
+
     constructor() {
         Renderer.#instance = this;
         this.#gameWindow = document.getElementById("render-target")!;
@@ -24,6 +26,7 @@ class Renderer {
         this.#gameWindow.appendChild(this.#renderer.domElement);
 
         this.#camera = (new Camera()).cameraInstance.camera;
+        this.#clock = new THREE.Clock();
 
         window.addEventListener("contextmenu", (event) => {
             event.preventDefault();
@@ -48,7 +51,7 @@ class Renderer {
     }
 
     #animate() {
-        this.#entityManager.mainPlayer.update();
+        this.#entityManager.update(this.#clock.getDelta());
         this.#renderer.render(this.scene, this.#camera);
     }
 
