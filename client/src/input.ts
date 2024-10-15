@@ -55,7 +55,6 @@ class InputManager {
         if (event.key === " ") {
             this.keysPressed.space = true;
         }
-        console.log("Keys pressed", this.keysPressed);
     }
 
     #onKeyUp(event: KeyboardEvent) {
@@ -63,7 +62,6 @@ class InputManager {
         if (event.key === " ") {
             this.keysPressed.space = false;
         }
-        console.log("Keys pressed", this.keysPressed);
     }
 
     public static get getInstance(): InputManager {

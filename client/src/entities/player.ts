@@ -31,12 +31,15 @@ class Player {
     #assetManager: AssetManager;
     #animationMixer: THREE.AnimationMixer;
 
+    #currentAction: [THREE.AnimationAction, string] | null = null;
+
     constructor() {
         this.gltfResult = AssetManager.getInstance.getGLTF("player");
         this.#inputManager = InputManager.getInstance;
 
         this.#assetManager = AssetManager.getInstance;
         this.#animationMixer = new THREE.AnimationMixer(this.gltfResult.scene);
+        this.#playAnimation("jump", true);
     }
 
     /**
@@ -75,7 +78,6 @@ class Player {
 
         // Handle space key
         if (this.#inputManager.keysPressed.space) {
-            this.#playAnimation("jump");
             this.updatePositionDeltas({ y: this.#jumpSpeed });
         } else if (this.position.y > this.#groundHeight) {
             if (this.position.y - this.#groundHeight <= this.#fallSpeed) {
@@ -83,7 +85,7 @@ class Player {
             } else {
                 this.updatePositionDeltas({ y: -this.#fallSpeed });
             }
-        }
+        } 
 
         this.gltfResult.scene.position.set(this.position.x, this.position.y, this.position.z);
     }
@@ -93,23 +95,36 @@ class Player {
      * @param position UpdatePosition interface with optional parameters for x y z
      */
     public updatePositionDeltas(position: UpdatePosition) {
-        console.log("positions", {position}, this.position);
         if (position.x !== undefined) this.position.x += position.x;
         if (position.y !== undefined) this.position.y += position.y;
         if (position.z !== undefined) this.position.z += position.z;
-        console.log("updated position", this.position);
 
         this.gltfResult.scene.position.set(this.position.x, this.position.y, this.position.z);
     }
 
-    #playAnimation(name: string) {
+    #playAnimation(name: string, shouldLoop: boolean = false) {
+        console.log("playing animation", name, "curr action: ", this.#currentAction);
+        this.gltfResult.scene.rotation.y -= THREE.MathUtils.degToRad(90);
         if (this.#animationMixer && this.#assetManager.animations.has(name)) {
             const animation = this.#assetManager.animations.get(name)!;
             const action = this.#animationMixer.clipAction(animation);
+
+            // Do not play another action if in the middle of one
+            if (this.#currentAction) return;
+
+            if (shouldLoop) {
+                action.setLoop(THREE.LoopRepeat, Infinity);
+            } else {
+                action.setLoop(THREE.LoopOnce, 1);
+                action.clampWhenFinished = true;
+            }
+
             action.play();
+            this.#currentAction = [action, name];
+
             console.log(`Playing animation: ${name}`);
         } else {
-            console.warn(`Animation '${name}' not found or animation mixer not initialized`);
+            console.warn(`Animation '${name}' not found or animtion mixer not initialized`);
         }
     }
 

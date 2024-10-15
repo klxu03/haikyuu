@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTF, GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader';
 import models from './models.json';
 import animations from './animations.json';
 import Renderer from "../render";
