@@ -17,6 +17,11 @@ interface GLTFResult extends GLTF {
     materials?: { [key: string]: THREE.Material };
 }
 
+type AnimationOptions = {
+    loopable?: boolean;
+    rotation?: number;
+}
+
 class AssetManager {
     static #instance: AssetManager;
     #glbLoader: GLTFLoader;
@@ -26,7 +31,7 @@ class AssetManager {
 
     #meshFactory: Map<string, GLTFResult>;
     #renderer: Renderer;
-    public animations: Map<string, THREE.AnimationClip>;
+    public animations: Map<string, [THREE.AnimationClip, AnimationOptions]>;
 
     readonly #playerScale = 0.65;
 
@@ -41,7 +46,7 @@ class AssetManager {
 
         this.#meshFactory = new Map<string, GLTFResult>();
 
-        this.animations = new Map<string, THREE.AnimationClip>();
+        this.animations = new Map<string, [THREE.AnimationClip, AnimationOptions]>();
     }
 
     #loadTexture(url: string) {
@@ -101,12 +106,17 @@ class AssetManager {
         }
     }
 
-    async #loadAnimation(name: string, url: string) {
+    async #loadAnimation(name: string, url: string, options: AnimationOptions) {
+        const animationOptions = {
+            loopable: options.loopable ?? true,
+            rotation: options.rotation ?? 0,
+        }
+
         try {
             const glb = await this.#glbLoader.loadAsync(url);
             const animation = glb.animations[0];
             if (animation) {
-                this.animations.set(name, animation);
+                this.animations.set(name, [animation, animationOptions]);
                 console.log(`Animation '${name}' loaded successfully`);
             } else {
                 console.warn(`No animation found in the GLB animation file: ${url}`);
@@ -151,7 +161,7 @@ class AssetManager {
         }
 
         for (const [key, value] of Object.entries(animations)) {
-            await this.#loadAnimation(key, value.url);
+            await this.#loadAnimation(key, value.url, value.options);
         }
 
         return true;
@@ -205,4 +215,4 @@ class AssetManager {
 }
 
 export default AssetManager;
-export type { GLTFResult };
+export type { GLTFResult, AnimationOptions };

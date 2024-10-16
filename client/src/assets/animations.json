@@ -1,7 +1,10 @@
 {
     "jump": {
         "url": "/animations/jump.glb",
-        "options": {}
+        "options": {
+            "loopable": false,
+            "rotation": 270
+        }
     },
     "idle": {
         "url": "/animations/idle.glb",

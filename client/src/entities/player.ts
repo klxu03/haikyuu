@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import AssetManager from "../assets/assetManager";
 import { InputManager } from "../input";
-import type { GLTFResult } from "../assets/assetManager";
+import type { GLTFResult, AnimationOptions } from "../assets/assetManager";
 
 interface Position {
     x: number;
@@ -31,7 +31,8 @@ class Player {
     #assetManager: AssetManager;
     #animationMixer: THREE.AnimationMixer;
 
-    #currentAction: [THREE.AnimationAction, string] | null = null;
+    #currentAction!: [THREE.AnimationAction, AnimationOptions, string];
+    #idleAction: THREE.AnimationAction;
 
     constructor() {
         this.gltfResult = AssetManager.getInstance.getGLTF("player");
@@ -39,7 +40,12 @@ class Player {
 
         this.#assetManager = AssetManager.getInstance;
         this.#animationMixer = new THREE.AnimationMixer(this.gltfResult.scene);
-        this.#playAnimation("jump", true);
+
+        const idleClip = (this.#assetManager.animations.get("idle")!)[0];
+        this.#idleAction = this.#animationMixer.clipAction(idleClip);
+        this.#idleAction.setLoop(THREE.LoopRepeat, Infinity);
+
+        this.#queueAnimation("idle");
     }
 
     /**
@@ -102,25 +108,26 @@ class Player {
         this.gltfResult.scene.position.set(this.position.x, this.position.y, this.position.z);
     }
 
-    #playAnimation(name: string, shouldLoop: boolean = false) {
+    #queueAnimation(name: string) {
         console.log("playing animation", name, "curr action: ", this.#currentAction);
-        this.gltfResult.scene.rotation.y -= THREE.MathUtils.degToRad(90);
+
         if (this.#animationMixer && this.#assetManager.animations.has(name)) {
-            const animation = this.#assetManager.animations.get(name)!;
+            const [animation, animationOptions] = this.#assetManager.animations.get(name)!;
             const action = this.#animationMixer.clipAction(animation);
+
+            this.gltfResult.scene.rotation.y += THREE.MathUtils.degToRad(animationOptions.rotation!);
 
             // Do not play another action if in the middle of one
             if (this.#currentAction) return;
 
-            if (shouldLoop) {
+            if (animationOptions.loopable) {
                 action.setLoop(THREE.LoopRepeat, Infinity);
             } else {
                 action.setLoop(THREE.LoopOnce, 1);
-                action.clampWhenFinished = true;
             }
 
             action.play();
-            this.#currentAction = [action, name];
+            this.#currentAction = [action, animationOptions, name];
 
             console.log(`Playing animation: ${name}`);
         } else {
