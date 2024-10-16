@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import AssetManager from "../assets/assetManager";
 import { InputManager } from "../input";
-import type { GLTFResult, AnimationOptions } from "../assets/assetManager";
+import type { GLTFResult } from "../assets/assetManager";
+import AnimationChain from "../assets/animationChain";
 
 interface Position {
     x: number;
@@ -31,8 +32,8 @@ class Player {
     #assetManager: AssetManager;
     #animationMixer: THREE.AnimationMixer;
 
-    #currentAction!: [THREE.AnimationAction, AnimationOptions, string];
-    #idleAction: THREE.AnimationAction;
+    #idleClip: THREE.AnimationClip;
+    #animationChain: AnimationChain | null = null;
 
     constructor() {
         this.gltfResult = AssetManager.getInstance.getGLTF("player");
@@ -41,10 +42,9 @@ class Player {
         this.#assetManager = AssetManager.getInstance;
         this.#animationMixer = new THREE.AnimationMixer(this.gltfResult.scene);
 
-        const idleClip = (this.#assetManager.animations.get("idle")!)[0];
-        this.#idleAction = this.#animationMixer.clipAction(idleClip);
-        this.#idleAction.setLoop(THREE.LoopRepeat, Infinity);
+        this.#idleClip = (this.#assetManager.animations.get("idle")!)[0];
 
+        this.#animationChain = null;
         this.#queueAnimation("idle");
     }
 
@@ -85,6 +85,8 @@ class Player {
         // Handle space key
         if (this.#inputManager.keysPressed.space) {
             this.updatePositionDeltas({ y: this.#jumpSpeed });
+            this.#animationChain!.stop();
+            this.#queueAnimation("jump");
         } else if (this.position.y > this.#groundHeight) {
             if (this.position.y - this.#groundHeight <= this.#fallSpeed) {
                 this.position.y = this.#groundHeight;
@@ -109,10 +111,13 @@ class Player {
     }
 
     #queueAnimation(name: string) {
-        console.log("playing animation", name, "curr action: ", this.#currentAction);
-
         if (this.#animationMixer && this.#assetManager.animations.has(name)) {
             const [animation, animationOptions] = this.#assetManager.animations.get(name)!;
+
+            this.#animationChain = new AnimationChain(this.#animationMixer, [animation, this.#idleClip]);
+            this.#animationChain.start();
+
+            /*
             const action = this.#animationMixer.clipAction(animation);
 
             this.gltfResult.scene.rotation.y += THREE.MathUtils.degToRad(animationOptions.rotation!);
@@ -130,14 +135,15 @@ class Player {
             this.#currentAction = [action, animationOptions, name];
 
             console.log(`Playing animation: ${name}`);
+            */
         } else {
             console.warn(`Animation '${name}' not found or animtion mixer not initialized`);
         }
     }
 
     #updateAnimations(deltaTime: number) {
-        if (this.#animationMixer) {
-            this.#animationMixer.update(deltaTime);
+        if (this.#animationChain) {
+            this.#animationChain.update(deltaTime);
         }
     }
 }
