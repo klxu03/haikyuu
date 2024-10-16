@@ -3,7 +3,7 @@
         "url": "/animations/jump.glb",
         "options": {
             "loopable": false,
-            "rotation": 270
+            "rotation": 70
         }
     },
     "idle": {

@@ -2,7 +2,7 @@ import * as THREE from "three";
 import AssetManager from "../assets/assetManager";
 import { InputManager } from "../input";
 import type { GLTFResult } from "../assets/assetManager";
-import AnimationChain from "../assets/animationChain";
+import AnimationChain, { type AnimationLink } from "../assets/animationChain";
 
 interface Position {
     x: number;
@@ -32,8 +32,9 @@ class Player {
     #assetManager: AssetManager;
     #animationMixer: THREE.AnimationMixer;
 
-    #idleClip: THREE.AnimationClip;
+    #idleLink: AnimationLink;
     #animationChain: AnimationChain | null = null;
+    #currentlyPlayingAnimationChain: boolean = false;
 
     constructor() {
         this.gltfResult = AssetManager.getInstance.getGLTF("player");
@@ -42,7 +43,7 @@ class Player {
         this.#assetManager = AssetManager.getInstance;
         this.#animationMixer = new THREE.AnimationMixer(this.gltfResult.scene);
 
-        this.#idleClip = (this.#assetManager.animations.get("idle")!)[0];
+        this.#idleLink = {clip: (this.#assetManager.animations.get("idle")!)[0], update: (deltaTime: number) => {}, start: () => {}, end: () => {}};
 
         this.#animationChain = null;
         this.#queueAnimation("idle");
@@ -58,6 +59,8 @@ class Player {
     }
 
     #handleMovement() {
+        if (this.#currentlyPlayingAnimationChain) return;
+
         let moveX = 0;
         let moveZ = 0;
 
@@ -78,12 +81,15 @@ class Player {
 
         // Calculate rotation based on movement direction
         if (moveX !== 0 || moveZ !== 0) {
+            console.log({moveX, moveZ});
             const angle = Math.atan2(moveX, moveZ);
+            console.log("rad:", angle, THREE.MathUtils.radToDeg(angle));
             this.gltfResult.scene.rotation.y = angle;
         }
 
         // Handle space key
         if (this.#inputManager.keysPressed.space) {
+            console.log("space", {moveX, moveZ});
             this.updatePositionDeltas({ y: this.#jumpSpeed });
             this.#animationChain!.stop();
             this.#queueAnimation("jump");
@@ -114,28 +120,27 @@ class Player {
         if (this.#animationMixer && this.#assetManager.animations.has(name)) {
             const [animation, animationOptions] = this.#assetManager.animations.get(name)!;
 
-            this.#animationChain = new AnimationChain(this.#animationMixer, [animation, this.#idleClip]);
-            this.#animationChain.start();
+            let update = (deltaTime: number) => {};
+            let start = () => {};
+            let end = () => {};
+            if (name === "jump") {
+                start = () => {
+                    this.#currentlyPlayingAnimationChain = true;
+                    console.log("start jumping, current rotation:", THREE.MathUtils.radToDeg(this.gltfResult.scene.rotation.y));
+                    this.gltfResult.scene.rotation.y += THREE.MathUtils.degToRad(animationOptions.rotation!);
+                    console.log("start jumping, new rotation:", THREE.MathUtils.radToDeg(this.gltfResult.scene.rotation.y));
+                }
 
-            /*
-            const action = this.#animationMixer.clipAction(animation);
-
-            this.gltfResult.scene.rotation.y += THREE.MathUtils.degToRad(animationOptions.rotation!);
-
-            // Do not play another action if in the middle of one
-            if (this.#currentAction) return;
-
-            if (animationOptions.loopable) {
-                action.setLoop(THREE.LoopRepeat, Infinity);
-            } else {
-                action.setLoop(THREE.LoopOnce, 1);
+                end = () => {
+                    console.log("end jumping, current rotation:", THREE.MathUtils.radToDeg(this.gltfResult.scene.rotation.y));
+                    this.gltfResult.scene.rotation.y -= THREE.MathUtils.degToRad(animationOptions.rotation!);
+                    console.log("end jumping, new rotation:", THREE.MathUtils.radToDeg(this.gltfResult.scene.rotation.y));
+                    this.#currentlyPlayingAnimationChain = false;
+                }
             }
 
-            action.play();
-            this.#currentAction = [action, animationOptions, name];
-
-            console.log(`Playing animation: ${name}`);
-            */
+            this.#animationChain = new AnimationChain(this.#animationMixer, [{clip: animation, update, start, end}, this.#idleLink]);
+            this.#animationChain.start();
         } else {
             console.warn(`Animation '${name}' not found or animtion mixer not initialized`);
         }
