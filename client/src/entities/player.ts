@@ -22,8 +22,8 @@ class Player {
     #inputManager: InputManager;
 
     readonly #moveSpeed = 0.1;
-    readonly #jumpSpeed = this.#moveSpeed * 2;
-    readonly #fallSpeed = this.#moveSpeed * 4;
+    readonly #jumpSpeed = this.#moveSpeed * 0.5;
+    readonly #fallSpeed = this.#jumpSpeed * 1.2;
 
     readonly #groundHeight = 0;
 
@@ -90,7 +90,6 @@ class Player {
         // Handle space key
         if (this.#inputManager.keysPressed.space) {
             console.log("space", {moveX, moveZ});
-            this.updatePositionDeltas({ y: this.#jumpSpeed });
             this.#animationChain!.stop();
             this.#queueAnimation("jump");
         } else if (this.position.y > this.#groundHeight) {
@@ -116,6 +115,7 @@ class Player {
         this.gltfResult.scene.position.set(this.position.x, this.position.y, this.position.z);
     }
 
+    #jumpTime = 0;
     #queueAnimation(name: string) {
         if (this.#animationMixer && this.#assetManager.animations.has(name)) {
             const [animation, animationOptions] = this.#assetManager.animations.get(name)!;
@@ -126,6 +126,7 @@ class Player {
             if (name === "jump") {
                 start = () => {
                     this.#currentlyPlayingAnimationChain = true;
+                    this.#jumpTime = 0;
                     // move the player up a bit to account for jumping forward
                     const jumpMagnitude = 0.65;
                     const dX = Math.sin(this.gltfResult.scene.rotation.y) * jumpMagnitude;
@@ -133,6 +134,22 @@ class Player {
                     this.updatePositionDeltas({x: dX, y: 0, z: dZ});
 
                     this.gltfResult.scene.rotation.y += THREE.MathUtils.degToRad(animationOptions.rotation!);
+                }
+
+                update = (deltaTime: number) => {
+                    this.#jumpTime += deltaTime;
+                    console.log("deltaTime:", deltaTime, "jumpTime:", this.#jumpTime);
+                    if (this.#jumpTime < 1.28) return;
+                    
+                    if (this.#jumpTime < 1.57) {
+                        this.updatePositionDeltas({ y: this.#jumpSpeed });
+                    } else {
+                        if (this.position.y - this.#groundHeight <= this.#fallSpeed) {
+                            this.position.y = this.#groundHeight;
+                        } else {
+                            this.updatePositionDeltas({ y: -this.#fallSpeed });
+                        }
+                    }
                 }
 
                 end = () => {
