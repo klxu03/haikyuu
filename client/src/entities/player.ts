@@ -126,15 +126,17 @@ class Player {
             if (name === "jump") {
                 start = () => {
                     this.#currentlyPlayingAnimationChain = true;
-                    console.log("start jumping, current rotation:", THREE.MathUtils.radToDeg(this.gltfResult.scene.rotation.y));
+                    // move the player up a bit to account for jumping forward
+                    const jumpMagnitude = 0.65;
+                    const dX = Math.sin(this.gltfResult.scene.rotation.y) * jumpMagnitude;
+                    const dZ = Math.cos(this.gltfResult.scene.rotation.y) * jumpMagnitude;
+                    this.updatePositionDeltas({x: dX, y: 0, z: dZ});
+
                     this.gltfResult.scene.rotation.y += THREE.MathUtils.degToRad(animationOptions.rotation!);
-                    console.log("start jumping, new rotation:", THREE.MathUtils.radToDeg(this.gltfResult.scene.rotation.y));
                 }
 
                 end = () => {
-                    console.log("end jumping, current rotation:", THREE.MathUtils.radToDeg(this.gltfResult.scene.rotation.y));
                     this.gltfResult.scene.rotation.y -= THREE.MathUtils.degToRad(animationOptions.rotation!);
-                    console.log("end jumping, new rotation:", THREE.MathUtils.radToDeg(this.gltfResult.scene.rotation.y));
                     this.#currentlyPlayingAnimationChain = false;
                 }
             }
