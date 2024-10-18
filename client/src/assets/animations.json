@@ -10,6 +10,13 @@
             "rotation": 70
         }
     },
+    "jump2": {
+        "url": "/animations/jump2.glb",
+        "options": {
+            "loopable": false,
+            "rotation": 70
+        }
+    },
     "slow_run": {
         "url": "/animations/slow_run.glb",
         "options": {}

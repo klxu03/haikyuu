@@ -23,16 +23,18 @@ class AnimationChain {
     #actions: THREE.AnimationAction[];
     #links: AnimationLink[];
     #currentIndex: number = -1;
+    #shouldCrossFadeToIdle: boolean;
 
     readonly #crossFadeDuration = 0.1;
 
     /**
      * 
      * @param mixer The mixer that will play the animation
+     * @param shouldCrossFadeToIdle If the animation should crossfade to idle when it ends
      * @param links The links that make up the animation chain
      * last link should always be the idle animation
      */
-    constructor(mixer: THREE.AnimationMixer, links: AnimationLink[]) {
+    constructor(mixer: THREE.AnimationMixer, shouldCrossFadeToIdle: boolean, links: AnimationLink[]) {
         console.log("links: ", links, "length: ", links.length);
         this.#mixer = mixer;
         this.#actions = links.map(link => {
@@ -49,6 +51,7 @@ class AnimationChain {
         });
 
         this.#links = links;
+        this.#shouldCrossFadeToIdle = shouldCrossFadeToIdle;
     }
 
     public start() {
@@ -99,21 +102,29 @@ class AnimationChain {
         nextAction.play();
     }
 
-    #crossFadeToIdle() {
-        const currentAction = this.#actions[this.#currentIndex];
-        console.log("currentAction Clip: ", currentAction.getClip());
-        this.#links[this.#currentIndex].end();
+    #crossFadeToIdle(): Promise<void> {
+        console.log("Crossfade to idle");
+        return new Promise<void>((resolve) => {
+            const currentAction = this.#actions[this.#currentIndex];
+            this.#links[this.#currentIndex].end();
 
-        const idleAction = this.#actions[this.#actions.length - 1];
-        console.log("idleAction Clip: ", idleAction.getClip());
-        currentAction.crossFadeTo(idleAction, this.#crossFadeDuration, true);
+            const idleAction = this.#actions[this.#actions.length - 1];
 
-        idleAction.reset();
-        idleAction.play();
+            idleAction.reset();
+            idleAction.play();
+            currentAction.crossFadeTo(idleAction, this.#crossFadeDuration, true);
+
+            setTimeout(() => {
+                resolve();
+            }, this.#crossFadeDuration * 1000);
+        });
     }
 
-    public stop() {
-        this.#links[this.#currentIndex].end();
+    public async stop() {
+        if (this.#shouldCrossFadeToIdle) {
+            await this.#crossFadeToIdle();
+        }
+
         this.#actions.forEach(action => action.stop());
     }
 }

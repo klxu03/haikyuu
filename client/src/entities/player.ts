@@ -132,16 +132,16 @@ class Player {
 
     #initAnimationChainManager() {
         // idle animation
-        const idleAnimationChain = new AnimationChain(this.#animationMixer, [this.#idleLink]);
+        const idleAnimationChain = new AnimationChain(this.#animationMixer, false, [this.#idleLink]);
         this.#animationChainManager.set("idle", idleAnimationChain);
 
         // jump animation
-        const [jumpAnimation, jumpAnimationOptions] = this.#assetManager.animations.get("jump")!;
+        const [jumpAnimation, jumpAnimationOptions] = this.#assetManager.animations.get("jump2")!;
         let start = () => {
             this.#currentlyPlayingAnimationChain = true;
             this.#jumpTime = 0;
             // move the player up a bit to account for jumping forward
-            const jumpMagnitude = 0.65;
+            const jumpMagnitude = 0.42;
             const dX = Math.sin(this.gltfResult.scene.rotation.y) * jumpMagnitude;
             const dZ = Math.cos(this.gltfResult.scene.rotation.y) * jumpMagnitude;
             this.updatePositionDeltas({ x: dX, y: 0, z: dZ });
@@ -151,9 +151,9 @@ class Player {
 
         let update = (deltaTime: number) => {
             this.#jumpTime += deltaTime;
-            if (this.#jumpTime < 1.28) return;
+            if (this.#jumpTime < 0.54) return;
 
-            if (this.#jumpTime < 1.57) {
+            if (this.#jumpTime < 0.85) {
                 this.updatePositionDeltas({ y: this.#jumpSpeed });
             } else {
                 if (this.position.y - this.#groundHeight <= this.#fallSpeed) {
@@ -169,7 +169,7 @@ class Player {
             this.#currentlyPlayingAnimationChain = false;
         }
         
-        const jumpAnimationChain = new AnimationChain(this.#animationMixer, [{ clip: jumpAnimation, update, start, end, loopable: jumpAnimationOptions.loopable! }, this.#idleLink]);
+        const jumpAnimationChain = new AnimationChain(this.#animationMixer, false, [{ clip: jumpAnimation, update, start, end, loopable: jumpAnimationOptions.loopable! }, this.#idleLink]);
         this.#animationChainManager.set("jump", jumpAnimationChain);
 
         // slow_run animation
@@ -181,16 +181,20 @@ class Player {
         end = () => {
         }
 
-        const slowRunAnimationChain = new AnimationChain(this.#animationMixer, [{ clip: slowRunAnimation, update: (deltaTime: number) => { }, start, end, loopable: slowRunAnimationOptions.loopable! }, this.#idleLink]);
+        const slowRunAnimationChain = new AnimationChain(this.#animationMixer, false, [{ clip: slowRunAnimation, update: (deltaTime: number) => { }, start, end, loopable: slowRunAnimationOptions.loopable! }, this.#idleLink]);
         this.#animationChainManager.set("slow_run", slowRunAnimationChain);
 
         // TODO: Add other animations
     }
 
     #jumpTime = 0;
-    #queueAnimation(name: string) {
+    async #queueAnimation(name: string) {
         if (this.#animationMixer && this.#animationChainManager.has(name)) {
-            this.#animationChain?.stop();
+            if (!this.#currentlyPlayingIdle) {
+                await this.#animationChain?.stop();
+            } else {
+                this.#animationChain?.stop();
+            }
             this.#animationChain = this.#animationChainManager.get(name)!;
             this.#animationChain.start();
         } else {
