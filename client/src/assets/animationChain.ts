@@ -121,6 +121,7 @@ class AnimationChain {
     }
 
     public async stop() {
+        console.log("Stopping animation chain");
         if (this.#shouldCrossFadeToIdle) {
             await this.#crossFadeToIdle();
         }

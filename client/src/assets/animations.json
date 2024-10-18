@@ -17,6 +17,13 @@
             "rotation": 70
         }
     },
+    "jump3": {
+        "url": "/animations/jump3.glb",
+        "options": {
+            "loopable": false,
+            "rotation": 70
+        }
+    },
     "slow_run": {
         "url": "/animations/slow_run.glb",
         "options": {}

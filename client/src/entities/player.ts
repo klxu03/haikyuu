@@ -136,7 +136,7 @@ class Player {
         this.#animationChainManager.set("idle", idleAnimationChain);
 
         // jump animation
-        const [jumpAnimation, jumpAnimationOptions] = this.#assetManager.animations.get("jump2")!;
+        const [jumpAnimation, jumpAnimationOptions] = this.#assetManager.animations.get("jump3")!;
         let start = () => {
             this.#currentlyPlayingAnimationChain = true;
             this.#jumpTime = 0;
@@ -151,9 +151,9 @@ class Player {
 
         let update = (deltaTime: number) => {
             this.#jumpTime += deltaTime;
-            if (this.#jumpTime < 0.54) return;
+            if (this.#jumpTime < 0.54 - 0.09) return;
 
-            if (this.#jumpTime < 0.85) {
+            if (this.#jumpTime < 0.85 - 0.1) {
                 this.updatePositionDeltas({ y: this.#jumpSpeed });
             } else {
                 if (this.position.y - this.#groundHeight <= this.#fallSpeed) {
@@ -181,7 +181,7 @@ class Player {
         end = () => {
         }
 
-        const slowRunAnimationChain = new AnimationChain(this.#animationMixer, false, [{ clip: slowRunAnimation, update: (deltaTime: number) => { }, start, end, loopable: slowRunAnimationOptions.loopable! }, this.#idleLink]);
+        const slowRunAnimationChain = new AnimationChain(this.#animationMixer, true, [{ clip: slowRunAnimation, update: (deltaTime: number) => { }, start, end, loopable: slowRunAnimationOptions.loopable! }, this.#idleLink]);
         this.#animationChainManager.set("slow_run", slowRunAnimationChain);
 
         // TODO: Add other animations
