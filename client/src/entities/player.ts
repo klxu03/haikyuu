@@ -23,7 +23,7 @@ class Player {
 
     readonly #moveSpeed = 0.1;
     readonly #jumpSpeed = this.#moveSpeed * 0.5;
-    readonly #fallSpeed = this.#jumpSpeed * 1.2;
+    readonly #fallSpeed = this.#jumpSpeed * 1.35;
 
     readonly #groundHeight = 0;
 
@@ -123,6 +123,10 @@ class Player {
             let update = (deltaTime: number) => {};
             let start = () => {};
             let end = () => {};
+
+            // TODO: Use a speed up factor, or something else to make the jump go less high, lower point of contact
+            const speedUpFactor = 1;
+
             if (name === "jump") {
                 start = () => {
                     this.#currentlyPlayingAnimationChain = true;
@@ -139,9 +143,9 @@ class Player {
                 update = (deltaTime: number) => {
                     this.#jumpTime += deltaTime;
                     console.log("deltaTime:", deltaTime, "jumpTime:", this.#jumpTime);
-                    if (this.#jumpTime < 1.28) return;
+                    if (this.#jumpTime < 1.28/speedUpFactor) return;
                     
-                    if (this.#jumpTime < 1.57) {
+                    if (this.#jumpTime < 1.57/speedUpFactor) {
                         this.updatePositionDeltas({ y: this.#jumpSpeed });
                     } else {
                         if (this.position.y - this.#groundHeight <= this.#fallSpeed) {

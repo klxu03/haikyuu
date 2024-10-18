@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import { AnimationOptions } from "./assetManager";
 
 type AnimationLink = {
     clip: THREE.AnimationClip;
