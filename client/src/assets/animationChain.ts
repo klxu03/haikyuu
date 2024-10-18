@@ -15,6 +15,7 @@ type AnimationLink = {
      * A function that is called when the animation ends
      */
     end: () => void;
+    loopable: boolean;
 }
 
 class AnimationChain {
@@ -25,13 +26,20 @@ class AnimationChain {
 
     readonly #crossFadeDuration = 0.1;
 
+    /**
+     * 
+     * @param mixer The mixer that will play the animation
+     * @param links The links that make up the animation chain
+     * last link should always be the idle animation
+     */
     constructor(mixer: THREE.AnimationMixer, links: AnimationLink[]) {
+        console.log("links: ", links, "length: ", links.length);
         this.#mixer = mixer;
         this.#actions = links.map(link => {
             const action = mixer.clipAction(link.clip);
             action.reset().setEffectiveTimeScale(1).setEffectiveWeight(1);
 
-            if (link.clip.name !== "idle") {
+            if (!link.loopable) {
                 action.setLoop(THREE.LoopOnce, 1);
             } else {
                 action.setLoop(THREE.LoopRepeat, Infinity);
@@ -44,6 +52,12 @@ class AnimationChain {
     }
 
     public start() {
+        // Reset all actions
+        this.#actions = this.#actions.map(action => {
+            action.reset().setEffectiveTimeScale(1).setEffectiveWeight(1);
+            return action;
+        });
+
         this.#currentIndex = 0;
         this.#links[0].start();
         this.#actions[0].play();
@@ -51,6 +65,11 @@ class AnimationChain {
 
     public update(deltaTime: number) {
         this.#mixer.update(deltaTime);
+
+        // If loopable, not possible to fade to next animation
+        if (this.#links[this.#currentIndex].loopable) {
+            return;
+        }
 
         if (this.#currentIndex < this.#actions.length - 1 &&
             this.#actions[this.#currentIndex].time >= this.#actions[this.#currentIndex].getClip().duration - this.#crossFadeDuration) {
@@ -77,11 +96,24 @@ class AnimationChain {
 
         // Prep the next action
         nextAction.reset();
-
         nextAction.play();
     }
 
+    #crossFadeToIdle() {
+        const currentAction = this.#actions[this.#currentIndex];
+        console.log("currentAction Clip: ", currentAction.getClip());
+        this.#links[this.#currentIndex].end();
+
+        const idleAction = this.#actions[this.#actions.length - 1];
+        console.log("idleAction Clip: ", idleAction.getClip());
+        currentAction.crossFadeTo(idleAction, this.#crossFadeDuration, true);
+
+        idleAction.reset();
+        idleAction.play();
+    }
+
     public stop() {
+        this.#links[this.#currentIndex].end();
         this.#actions.forEach(action => action.stop());
     }
 }

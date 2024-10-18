@@ -117,7 +117,7 @@ class AssetManager {
             const animation = glb.animations[0];
             if (animation) {
                 this.animations.set(name, [animation, animationOptions]);
-                console.log(`Animation '${name}' loaded successfully`);
+                console.log(`Animation '${name}' loaded successfully`, animation);
             } else {
                 console.warn(`No animation found in the GLB animation file: ${url}`);
             }

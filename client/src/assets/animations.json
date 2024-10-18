@@ -1,4 +1,8 @@
 {
+    "idle": {
+        "url": "/animations/idle.glb",
+        "options": {}
+    },
     "jump": {
         "url": "/animations/jump.glb",
         "options": {
@@ -6,8 +10,12 @@
             "rotation": 70
         }
     },
-    "idle": {
-        "url": "/animations/idle.glb",
+    "slow_run": {
+        "url": "/animations/slow_run.glb",
+        "options": {}
+    },
+    "fast_run": {
+        "url": "/animations/fast_run.glb",
         "options": {}
     }
 }
