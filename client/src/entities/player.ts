@@ -67,6 +67,8 @@ class Player {
     }
 
     #handleKeyUp(event: KeyboardEvent) {
+        if (this.#currentlyPlayingAnimationChain) return;
+
         const movementKeys = ["w", "a", "s", "d"];
         if (movementKeys.includes(event.key)) {
             this.#queueAnimation("idle");
