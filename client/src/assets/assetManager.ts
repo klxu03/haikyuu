@@ -3,6 +3,7 @@ import { GLTF, GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import models from './models.json';
 import animations from './animations.json';
 import Renderer from "../render";
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils';
 
 type ModelOptions = {
     recieveShadow?: boolean;
@@ -12,7 +13,7 @@ type ModelOptions = {
 }
 
 interface GLTFResult extends GLTF {
-    scene: THREE.Group;
+    scene: THREE.Object3D<THREE.Object3DEventMap> & { isGroup: true };
     nodes?: { [key: string]: THREE.Object3D };
     materials?: { [key: string]: THREE.Material };
 }
@@ -167,45 +168,238 @@ class AssetManager {
         return true;
     }
 
-    #getPlayerObject(): GLTFResult {
-        const armature = this.#meshFactory.get("armature")!;
-        this.#renderer.scene.add(armature.scene);
+    #debugObject(obj: any) {
+        console.log('Object type:', typeof obj);
+        console.log('Is Object3D:', obj instanceof THREE.Object3D);
+        console.log('Is Group:', obj instanceof THREE.Group);
+        console.log('Object properties:', Object.keys(obj));
+        console.log('Object prototype chain:', Object.getPrototypeOf(obj));
+    }
 
-        const skinnedMesh = armature.nodes!.Plane as THREE.SkinnedMesh;
-        const skeleton = skinnedMesh.skeleton as THREE.Skeleton;
+    /*
+    public getPlayerObject(): GLTFResult {
+        const armature = this.#meshFactory.get("armature")!;
+        const clonedScene = this.cloneSkinnedMesh(armature.scene);
 
         const assets = ["head1", "hair1", "eyes1", "nose1", "top1", "bottom1", "shoes2"];
 
-        assets.forEach((asset) => {
-            const model = this.#meshFactory.get(asset)!;
-            let scene = model.scene;
+        assets.forEach((assetName) => {
+            const asset = this.#meshFactory.get(assetName)!;
+            console.log("asset has an asset scene", asset.scene);
+            const assetClone = this.cloneSkinnedMesh(asset.scene);
+            this.#debugObject(assetClone);
+            console.log({assetClone});
 
-            const group = new THREE.Group();
-
-            scene.traverse((child: THREE.Object3D) => {
-                if (child instanceof THREE.Mesh) {
-                    const skinnedMesh = new THREE.SkinnedMesh(child.geometry, child.material);
-                    skinnedMesh.castShadow = true;
-                    skinnedMesh.receiveShadow = true;
-
-                    skinnedMesh.bind(skeleton);
-                    group.add(skinnedMesh);
+            // THREE.Object3D.prototype.traverse.call(assetClone, (child: THREE.Object3D) => {
+            //     if (child instanceof THREE.SkinnedMesh) {
+            //         clonedScene.add(child);
+            //     }
+            // });
+            // Instead of using traverse, directly work with the children
+            const processNode = (node: THREE.Object3D) => {
+                if (node instanceof THREE.SkinnedMesh) {
+                    clonedScene.add(node);
                 }
-            });
-
-            this.#renderer.scene.add(group);
+                
+                // Process children recursively
+                if (node.children && node.children.length > 0) {
+                    node.children.forEach(child => processNode(child));
+                }
+            };
+            
+            // Process the root node and all its children
+            processNode(assetClone);
         })
 
-        skeleton.update();
+        clonedScene.traverse((node: any) => {
+            if (node instanceof THREE.SkinnedMesh && node.skeleton) {
+                node.skeleton.update();
+            }
+        });
 
-        return armature;
+        return { ...armature, scene: clonedScene as THREE.Object3D<THREE.Object3DEventMap> & { isGroup: true } };
     }
 
+    private cloneSkinnedMesh(source: THREE.Object3D): THREE.Object3D {
+        const clone = SkeletonUtils.clone(source);
+
+        clone.traverse((node: THREE.Object3D) => {
+            if (node instanceof THREE.SkinnedMesh) {
+                node.castShadow = true;
+                node.receiveShadow = true;
+
+                if (node.skeleton) {
+                    node.skeleton.update();
+                }
+            }
+        });
+
+        return clone;
+    }
+
+    public getPlayerObject(): GLTFResult {
+        const armature = this.#meshFactory.get("armature")!;
+        const clonedScene = this.cloneSkinnedMesh(armature.scene);
+    
+        // First, find the skeleton/bones in the cloned armature
+        let armatureSkeleton: THREE.Skeleton | null = null;
+        const findSkeleton = (node: THREE.Object3D) => {
+            if (node instanceof THREE.SkinnedMesh && node.skeleton) {
+                armatureSkeleton = node.skeleton;
+            }
+            node.children.forEach(child => findSkeleton(child));
+        };
+        findSkeleton(clonedScene);
+    
+        const assets = ["head1", "hair1", "eyes1", "nose1", "top1", "bottom1", "shoes2"];
+    
+        assets.forEach((assetName) => {
+            const asset = this.#meshFactory.get(assetName)!;
+            console.log("asset has an asset scene", asset.scene);
+            
+            try {
+                const assetClone = this.cloneSkinnedMesh(asset.scene);
+    
+                // Process nodes and bind to armature skeleton
+                const processNode = (node: THREE.Object3D) => {
+                    if (node instanceof THREE.SkinnedMesh) {
+                        // Bind the mesh to the armature's skeleton
+                        if (armatureSkeleton) {
+                            node.skeleton = armatureSkeleton;
+                            // Copy the bind matrix from the original mesh
+                            node.bindMatrix.copy(node.bindMatrix);
+                            node.bind(armatureSkeleton, node.bindMatrix);
+                        }
+                        clonedScene.add(node);
+                    }
+                    
+                    node.children.forEach(child => processNode(child));
+                };
+    
+                processNode(assetClone);
+    
+            } catch (error) {
+                console.error(`Error processing asset ${assetName}:`, error);
+            }
+        });
+    
+        // Final update of all skeletons
+        const updateSkeletons = (node: THREE.Object3D) => {
+            if (node instanceof THREE.SkinnedMesh && node.skeleton) {
+                node.skeleton.update();
+            }
+            node.children.forEach(child => updateSkeletons(child));
+        };
+    
+        updateSkeletons(clonedScene);
+    
+        return { 
+            ...armature, 
+            scene: clonedScene as THREE.Object3D<THREE.Object3DEventMap> & { isGroup: true } 
+        };
+    }
+    */
+
+    public getPlayerObject(): GLTFResult {
+        const armature = this.#meshFactory.get("armature")!;
+        const clonedScene = this.cloneSkinnedMesh(armature.scene);
+    
+        // Get the base mesh and skeleton from the cloned armature
+        let baseMesh: THREE.SkinnedMesh | null = null;
+        let skeleton: THREE.Skeleton | null = null;
+    
+        clonedScene.traverse((node: THREE.Object3D) => {
+            if (node.name === 'Plane' && node instanceof THREE.SkinnedMesh) {
+                baseMesh = node;
+                skeleton = node.skeleton;
+            }
+        });
+    
+        if (!skeleton || !baseMesh) {
+            console.error("Could not find base mesh or skeleton");
+            return armature;
+        }
+    
+        const assets = ["head1", "hair1", "eyes1", "nose1", "top1", "bottom1", "shoes2"];
+        
+        assets.forEach((assetName) => {
+            const asset = this.#meshFactory.get(assetName)!;
+            const group = new THREE.Group();
+    
+            asset.scene.traverse((child: THREE.Object3D) => {
+                if (child instanceof THREE.Mesh) {
+                    const newSkinnedMesh = new THREE.SkinnedMesh(
+                        child.geometry,
+                        child.material
+                    );
+                    newSkinnedMesh.castShadow = true;
+                    newSkinnedMesh.receiveShadow = true;
+                    newSkinnedMesh.bind(skeleton!);
+                    group.add(newSkinnedMesh);
+                }
+            });
+    
+            clonedScene.add(group);
+        });
+    
+        skeleton.update();
+    
+        return { 
+            ...armature, 
+            scene: clonedScene as THREE.Object3D<THREE.Object3DEventMap> & { isGroup: true },
+            nodes: {
+                ...armature.nodes,
+                Plane: baseMesh
+            }
+        };
+    }
+   
+    private cloneSkinnedMesh(source: THREE.Object3D): THREE.Object3D {
+        try {
+            const clone = SkeletonUtils.clone(source);
+            
+            // Create a map of original bones to cloned bones
+            const boneMap = new Map<THREE.Bone, THREE.Bone>();
+            
+            const mapBones = (original: THREE.Object3D, cloned: THREE.Object3D) => {
+                if (original instanceof THREE.Bone && cloned instanceof THREE.Bone) {
+                    boneMap.set(original, cloned);
+                }
+                for (let i = 0; i < original.children.length; i++) {
+                    mapBones(original.children[i], cloned.children[i]);
+                }
+            };
+            
+            mapBones(source, clone);
+            
+            // Update skinned meshes with mapped bones
+            clone.traverse((node: THREE.Object3D) => {
+                if (node instanceof THREE.SkinnedMesh) {
+                    node.castShadow = true;
+                    node.receiveShadow = true;
+                    
+                    if (node.skeleton) {
+                        const newBones = node.skeleton.bones.map(bone => {
+                            const mappedBone = boneMap.get(bone);
+                            return mappedBone || bone;
+                        });
+                        node.skeleton.bones = newBones;
+                    }
+                }
+            });
+            
+            return clone;
+        } catch (error) {
+            console.error("Error in cloneSkinnedMesh:", error);
+            throw error;
+        }
+    }
+    
     public getGLTF(id: string): GLTFResult {
         if (id === "player") {
-            const playerObject = this.#getPlayerObject();
+            throw new Error("player object is not cloneable");
+            // const playerObject = this.getPlayerObject();
             // return { ...playerObject, scene: playerObject.scene.clone(true) };
-            return playerObject;
         }
 
         const meshObject = this.#meshFactory.get(id)!;

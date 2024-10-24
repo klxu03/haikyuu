@@ -56,7 +56,7 @@ class Player {
 
     constructor(position: Position = { x: 0, y: this.#groundHeight, z: 0 }, isMainPlayer: boolean = false) {
         this.position = position;
-        this.gltfResult = AssetManager.getInstance.getGLTF("player");
+        this.gltfResult = AssetManager.getInstance.getPlayerObject();
         this.gltfResult.scene.position.set(this.position.x, this.position.y, this.position.z);
         
         this.#renderer = Renderer.getInstance;
