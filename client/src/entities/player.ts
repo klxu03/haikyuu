@@ -3,6 +3,9 @@ import AssetManager from "../assets/assetManager";
 import { InputManager } from "../input";
 import type { GLTFResult } from "../assets/assetManager";
 import AnimationChain, { type AnimationLink } from "../assets/animationChain";
+import EntityManager from "./entityManager";
+import { Socket } from "socket.io-client";
+import Renderer from "../render";
 
 interface Position {
     x: number;
@@ -16,6 +19,14 @@ interface UpdatePosition {
     z?: number;
 }
 
+interface ServerToClientEvents {
+    player_id: (socketId: string) => void;
+}
+
+interface ClientToServerEvents {
+  client_movement: (movement: Position) => void;
+}
+
 class Player {
     public gltfResult: GLTFResult;
 
@@ -27,7 +38,8 @@ class Player {
 
     readonly #groundHeight = 0;
 
-    public position: Position = { x: 0, y: this.#groundHeight, z: 0 };
+    public position: Position;
+    #isMainPlayer: boolean;
 
     #assetManager: AssetManager;
     #animationMixer: THREE.AnimationMixer;
@@ -38,8 +50,22 @@ class Player {
     #currentlyPlayingAnimationChain: boolean = false;
     #animationChainManager: Map<string, AnimationChain> = new Map();
 
-    constructor() {
+    #socket: Socket<ServerToClientEvents, ClientToServerEvents>;
+
+    #renderer: Renderer;
+
+    constructor(position: Position = { x: 0, y: this.#groundHeight, z: 0 }, isMainPlayer: boolean = false) {
+        this.position = position;
         this.gltfResult = AssetManager.getInstance.getGLTF("player");
+        this.gltfResult.scene.position.set(this.position.x, this.position.y, this.position.z);
+        
+        this.#renderer = Renderer.getInstance;
+        this.#renderer.scene.add(this.gltfResult.scene);
+        
+        console.log("constructed main player", isMainPlayer, "placed at position", this.position);
+
+        this.#isMainPlayer = isMainPlayer;
+
         this.#inputManager = InputManager.getInstance;
 
         this.#assetManager = AssetManager.getInstance;
@@ -55,6 +81,8 @@ class Player {
 
         this.#queueAnimation("idle");
         window.addEventListener("keyup", this.#handleKeyUp.bind(this));
+        
+        this.#socket = EntityManager.getInstance.socket;
     }
 
     /**
@@ -77,14 +105,32 @@ class Player {
 
     #handleMovement() {
         if (this.#currentlyPlayingAnimationChain) return;
+        let changedPosition = false;
 
         let moveX = 0;
         let moveZ = 0;
 
-        if (this.#inputManager.keysPressed.w) moveZ -= this.#moveSpeed;
-        if (this.#inputManager.keysPressed.s) moveZ += this.#moveSpeed;
-        if (this.#inputManager.keysPressed.a) moveX -= this.#moveSpeed;
-        if (this.#inputManager.keysPressed.d) moveX += this.#moveSpeed;
+        if (this.#isMainPlayer) {
+            if (this.#inputManager.keysPressed.w) moveZ -= this.#moveSpeed;
+            if (this.#inputManager.keysPressed.s) moveZ += this.#moveSpeed;
+            if (this.#inputManager.keysPressed.a) moveX -= this.#moveSpeed;
+            if (this.#inputManager.keysPressed.d) moveX += this.#moveSpeed;
+
+            // Handle space key
+            if (this.#inputManager.keysPressed.space) {
+                this.#animationChain!.stop();
+                this.#currentlyPlayingAnimationChain = true;
+                this.#queueAnimation("jump");
+                changedPosition = true;
+            } else if (this.position.y > this.#groundHeight) {
+                if (this.position.y - this.#groundHeight <= this.#fallSpeed) {
+                    this.position.y = this.#groundHeight;
+                } else {
+                    this.updatePositionDeltas({ y: -this.#fallSpeed });
+                }
+                changedPosition = true;
+            }
+        }
 
         // Normalize diagonal movement
         if (moveX !== 0 && moveZ !== 0) {
@@ -102,22 +148,13 @@ class Player {
             // Calculate rotation based on movement direction
             const angle = Math.atan2(moveX, moveZ);
             this.gltfResult.scene.rotation.y = angle;
+            changedPosition = true;
         }
 
-        // Handle space key
-        if (this.#inputManager.keysPressed.space) {
-            this.#animationChain!.stop();
-            this.#currentlyPlayingAnimationChain = true;
-            this.#queueAnimation("jump");
-        } else if (this.position.y > this.#groundHeight) {
-            if (this.position.y - this.#groundHeight <= this.#fallSpeed) {
-                this.position.y = this.#groundHeight;
-            } else {
-                this.updatePositionDeltas({ y: -this.#fallSpeed });
-            }
+        if (changedPosition) {
+            this.gltfResult.scene.position.set(this.position.x, this.position.y, this.position.z);
+            if (this.#isMainPlayer) this.#socket.emit("client_movement", this.position);
         }
-
-        this.gltfResult.scene.position.set(this.position.x, this.position.y, this.position.z);
     }
 
     /**
@@ -212,3 +249,4 @@ class Player {
 }
 
 export default Player;
+export type { Position };

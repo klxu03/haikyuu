@@ -203,10 +203,13 @@ class AssetManager {
 
     public getGLTF(id: string): GLTFResult {
         if (id === "player") {
-            return this.#getPlayerObject();
+            const playerObject = this.#getPlayerObject();
+            // return { ...playerObject, scene: playerObject.scene.clone(true) };
+            return playerObject;
         }
 
-        return this.#meshFactory.get(id)!;
+        const meshObject = this.#meshFactory.get(id)!;
+        return { ...meshObject, scene: meshObject.scene.clone(true) };
     }
 
     public static get getInstance(): AssetManager {
