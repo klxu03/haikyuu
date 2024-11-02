@@ -8,8 +8,9 @@ import { Position, Player } from "./player";
 
 interface ServerToClientEvents {
     position_update: (socketId: string, position: Position) => void;
+    animation_update: (socketId: string, animation: string) => void;
     player_id: (socketId: string, position: Position) => void;
-    player_connected: (socketId: string) => void;
+    player_connected: (socketId: string, position: Position) => void;
     player_disconnected: (socketId: string) => void;
     initial_players: (players: Record<string, Player>) => void;
     error: (errorMessage: string) => void;
@@ -17,6 +18,7 @@ interface ServerToClientEvents {
 
 interface ClientToServerEvents {
     client_movement: (movement: Position) => void;
+    client_animation: (animation: string) => void;
 }
 
 class GameState {
@@ -60,7 +62,7 @@ io.on("connection", (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
 
     socket.emit("player_id", socket.id, gameState.playerManager.getPlayer(socket.id)!.position);
 
-    socket.broadcast.emit("player_connected", socket.id);
+    socket.broadcast.emit("player_connected", socket.id, gameState.playerManager.getPlayer(socket.id)!.position);
     socket.emit("initial_players", gameState.playerManager.getAllPlayers());
 
     socket.on("client_movement", (position: Position) => {
@@ -70,6 +72,11 @@ io.on("connection", (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
             y: position.y,
             z: position.z,
         });
+    });
+
+    socket.on("client_animation", (animation: string) => {
+        console.log("server received client_animation", socket.id, animation);
+        socket.broadcast.emit("animation_update", socket.id, animation);
     });
 
     socket.on("disconnect", () => {

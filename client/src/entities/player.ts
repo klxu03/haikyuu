@@ -24,7 +24,8 @@ interface ServerToClientEvents {
 }
 
 interface ClientToServerEvents {
-  client_movement: (movement: Position) => void;
+    client_movement: (movement: Position) => void;
+    client_animation: (animation: string) => void;
 }
 
 class Player {
@@ -89,8 +90,8 @@ class Player {
      * Update the player's position and animations
      * @param deltaTime The time since the last update
      */
-    public update(deltaTime: number) {
-        this.#handleMovement();
+    public update(deltaTime: number, position: Position) {
+        this.handleMovement(position);
         this.#updateAnimations(deltaTime);
     }
 
@@ -103,7 +104,7 @@ class Player {
         }
     }
 
-    #handleMovement() {
+    public handleMovement(position: Position) {
         if (this.#currentlyPlayingAnimationChain) return;
         let changedPosition = false;
 
@@ -121,22 +122,19 @@ class Player {
                 this.#animationChain!.stop();
                 this.#currentlyPlayingAnimationChain = true;
                 this.#queueAnimation("jump");
-                changedPosition = true;
-            } else if (this.position.y > this.#groundHeight) {
-                if (this.position.y - this.#groundHeight <= this.#fallSpeed) {
-                    this.position.y = this.#groundHeight;
-                } else {
-                    this.updatePositionDeltas({ y: -this.#fallSpeed });
-                }
-                changedPosition = true;
             }
-        }
+        } 
 
         // Normalize diagonal movement
         if (moveX !== 0 && moveZ !== 0) {
             const normalizer = Math.sqrt(2) / 2;
             moveX *= normalizer;
             moveZ *= normalizer;
+        }
+
+        if (!this.#isMainPlayer) {
+            moveX = position.x - this.position.x;
+            moveZ = position.z - this.position.z;
         }
 
         if (moveX !== 0 || moveZ !== 0) {
@@ -153,7 +151,6 @@ class Player {
 
         if (changedPosition) {
             this.gltfResult.scene.position.set(this.position.x, this.position.y, this.position.z);
-            if (this.#isMainPlayer) this.#socket.emit("client_movement", this.position);
         }
     }
 
@@ -167,6 +164,7 @@ class Player {
         if (position.z !== undefined) this.position.z += position.z;
 
         this.gltfResult.scene.position.add(new THREE.Vector3(position.x ?? 0, position.y ?? 0, position.z ?? 0));
+        if (this.#isMainPlayer) this.#socket.emit("client_movement", this.position);
     }
 
     #initAnimationChainManager() {
@@ -215,6 +213,7 @@ class Player {
         const [slowRunAnimation, slowRunAnimationOptions] = this.#assetManager.animations.get("slow_run")!;
         start = () => {
             this.#currentlyPlayingIdle = false;
+            console.log("started slow run, currently playing idle:", this.#currentlyPlayingIdle);
         };
 
         end = () => {
@@ -226,9 +225,29 @@ class Player {
         // TODO: Add other animations
     }
 
+    /**
+     * Start an animation
+     * @param name The name of the animation to start
+     */
+    public async startAnimation(name: string) {
+        if (name === "slow_run") return;
+        console.log("startAnimation", name);
+
+        await this.#queueAnimation(name);
+    }
+
     #jumpTime = 0;
     async #queueAnimation(name: string) {
         if (this.#animationMixer && this.#animationChainManager.has(name)) {
+            try {
+                if (this.#isMainPlayer) {
+                    this.#socket.emit("client_animation", name);
+                    console.log("emitted client_animation", name);
+                }
+            } catch (error) {
+                console.error("Error emitting client_animation", error);
+            }
+
             if (!this.#currentlyPlayingIdle) {
                 await this.#animationChain?.stop();
             } else {

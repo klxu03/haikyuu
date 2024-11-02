@@ -3,8 +3,9 @@ import { io, Socket } from "socket.io-client";
 
 interface ServerToClientEvents {
     position_update: (socketId: string, position: Position) => void;
+    animation_update: (socketId: string, animation: string) => void;
     player_id: (socketId: string, position: Position) => void;
-    player_connected: (socketId: string) => void;
+    player_connected: (socketId: string, position: Position) => void;
     player_disconnected: (socketId: string) => void;
     initial_players: (players: Record<string, Player>) => void;
     error: (errorMessage: string) => void;
@@ -12,12 +13,13 @@ interface ServerToClientEvents {
 
 interface ClientToServerEvents {
     client_movement: (movement: Position) => void;
+    client_animation: (animation: string) => void;
 }
 
 class EntityManager {
     static #instance: EntityManager;
     mainPlayer!: Player;
-    players: Map<string, Player>;
+    players: Map<string, [Player, Position]>;
 
     socket: Socket<ServerToClientEvents, ClientToServerEvents>;
     socketId!: string;
@@ -50,7 +52,29 @@ class EntityManager {
                 if (socketId === this.socketId) continue;
                 console.log("Adding player", socketId);
                 const newPlayer = new Player(player.position, false);
-                this.players.set(socketId, newPlayer);
+                this.players.set(socketId, [newPlayer, player.position]);
+            }
+        });
+
+        this.socket.on("player_connected", (socketId: string, position: Position) => {
+            const newPlayer = new Player(position, false);
+            this.players.set(socketId, [newPlayer, position]);
+        });
+
+        this.socket.on("position_update", (socketId: string, position: Position) => {
+            if (socketId === this.socketId) return;
+            const player = this.players.get(socketId);
+            if (player) {
+                player[1] = position;
+            }
+        });
+
+        this.socket.on("animation_update", (socketId: string, animation: string) => {
+            console.log("client received animation_update", { socketId, animation });
+            if (socketId === this.socketId) return;
+            const player = this.players.get(socketId);
+            if (player) {
+                player[0].startAnimation(animation);
             }
         });
     }
@@ -61,11 +85,11 @@ class EntityManager {
 
     public update(deltaTime: number) {
         if (this.mainPlayer) {
-            this.mainPlayer.update(deltaTime);
+            this.mainPlayer.update(deltaTime, this.mainPlayer.position);
         }
 
         for (const player of this.players.values()) {
-            player.update(deltaTime);
+            player[0].update(deltaTime, player[1]);
         }
     }
 }
