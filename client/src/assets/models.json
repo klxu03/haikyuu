@@ -4,11 +4,6 @@
         "type": "mesh",
         "options": {}
     },
-    "volleyball": {
-        "url": "/models/volleyball.glb",
-        "type": "asset",
-        "options": {}
-    },
     "armature": {
         "url": "/models/armature.glb",
         "type": "avatar",

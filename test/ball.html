@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pyramid Ball Game</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+        #instructions {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial;
+            font-size: 14px;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #debug {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            font-family: monospace;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="instructions">
+        Use WASD to move the pyramid<br>
+        Collide with the ball to hit it!
+    </div>
+    <div id="debug"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Debug display
+        const debugDiv = document.getElementById('debug');
+
+        // Create ground plane
+        const groundGeometry = new THREE.PlaneGeometry(20, 20);
+        const groundMaterial = new THREE.MeshPhongMaterial({ color: 0x333333 });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -0.5;
+        scene.add(ground);
+
+        // Create player pyramid
+        const pyramidGeometry = new THREE.ConeGeometry(0.5, 1, 4); // radius, height, number of sides (4 for pyramid)
+        const pyramidMaterial = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
+        const pyramid = new THREE.Mesh(pyramidGeometry, pyramidMaterial);
+        scene.add(pyramid);
+        pyramid.position.set(0, 0.5, 5);
+
+        // Create invisible cylinder for collision (bounding cylinder)
+        const cylinderGeometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
+        const cylinderMaterial = new THREE.MeshBasicMaterial({ 
+            transparent: true, 
+            opacity: 0.2,  // Slightly visible for debugging, set to 0 for invisible
+            depthWrite: false 
+        });
+        const boundingCylinder = new THREE.Mesh(cylinderGeometry, cylinderMaterial);
+        scene.add(boundingCylinder);
+        boundingCylinder.position.copy(pyramid.position);
+
+        // Create visible ball
+        const ballGeometry = new THREE.SphereGeometry(0.5);
+        const ballMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+        const ball = new THREE.Mesh(ballGeometry, ballMaterial);
+        scene.add(ball);
+        ball.position.set(0, 0.5, 0);
+
+        // Create invisible collision sphere
+        const collisionGeometry = new THREE.SphereGeometry(0.8);
+        const collisionMaterial = new THREE.MeshBasicMaterial({ 
+            transparent: true, 
+            opacity: 0.2,  // Slightly visible for debugging, set to 0 for invisible
+            depthWrite: false
+        });
+        const collisionSphere = new THREE.Mesh(collisionGeometry, collisionMaterial);
+        scene.add(collisionSphere);
+        ball.add(collisionSphere);
+
+        // Create walls
+        const wallGeometry = new THREE.BoxGeometry(20, 10, 1);
+        const wallMaterial = new THREE.MeshPhongMaterial({ color: 0x808080 });
+        const backWall = new THREE.Mesh(wallGeometry, wallMaterial);
+        backWall.position.z = -10;
+        scene.add(backWall);
+
+        // Add lighting
+        const light = new THREE.PointLight(0xffffff, 1, 100);
+        light.position.set(0, 10, 10);
+        scene.add(light);
+        const ambientLight = new THREE.AmbientLight(0x404040);
+        scene.add(ambientLight);
+
+        camera.position.y = 4;
+        camera.position.z = 15;
+        camera.lookAt(0, 0, 0);
+
+        // Game variables
+        let ballVelocity = new THREE.Vector3(0, 0, 0);
+        const GRAVITY = 0.015;
+        const BOUNCE_FACTOR = 0.7;
+
+        const keys = {
+            w: false,
+            s: false,
+            a: false,
+            d: false
+        };
+
+        document.addEventListener('keydown', (event) => {
+            if (keys.hasOwnProperty(event.key.toLowerCase())) {
+                keys[event.key.toLowerCase()] = true;
+            }
+        });
+
+        document.addEventListener('keyup', (event) => {
+            if (keys.hasOwnProperty(event.key.toLowerCase())) {
+                keys[event.key.toLowerCase()] = false;
+            }
+        });
+
+        function updatePlayer() {
+            const moveSpeed = 0.2;
+            const rotationSpeed = 0.1;
+            
+            if (keys.w) {
+                pyramid.position.z -= moveSpeed;
+                boundingCylinder.position.z -= moveSpeed;
+            }
+            if (keys.s) {
+                pyramid.position.z += moveSpeed;
+                boundingCylinder.position.z += moveSpeed;
+            }
+            if (keys.a) {
+                pyramid.position.x -= moveSpeed;
+                boundingCylinder.position.x -= moveSpeed;
+            }
+            if (keys.d) {
+                pyramid.position.x += moveSpeed;
+                boundingCylinder.position.x += moveSpeed;
+            }
+
+            if (keys.a || keys.d) {
+                const rotationAmount = (keys.d ? rotationSpeed : -rotationSpeed);
+                pyramid.rotation.y += rotationAmount;
+                boundingCylinder.rotation.y += rotationAmount;
+            }
+
+            // Keep within bounds
+            pyramid.position.x = Math.max(Math.min(pyramid.position.x, 9), -9);
+            pyramid.position.z = Math.max(Math.min(pyramid.position.z, 9), -9);
+            boundingCylinder.position.copy(pyramid.position);
+        }
+
+        let isColliding = false;
+
+        function checkCollision() {
+            // Create bounding cylinders for collision check
+            // We'll approximate cylinder collision using sphere intersection at multiple points
+            const cylinderBase = new THREE.Sphere(
+                new THREE.Vector3(
+                    boundingCylinder.position.x,
+                    boundingCylinder.position.y,
+                    boundingCylinder.position.z
+                ),
+                0.5
+            );
+            
+            const ballBoundingSphere = new THREE.Sphere(ball.position, 0.8);
+
+            const isIntersecting = cylinderBase.intersectsSphere(ballBoundingSphere);
+            
+            debugDiv.textContent = `
+                Collision: ${isIntersecting}
+                Ball Pos: ${ball.position.x.toFixed(1)}, ${ball.position.y.toFixed(1)}, ${ball.position.z.toFixed(1)}
+                Pyramid Pos: ${pyramid.position.x.toFixed(1)}, ${pyramid.position.y.toFixed(1)}, ${pyramid.position.z.toFixed(1)}
+                Ball Vel: ${ballVelocity.x.toFixed(1)}, ${ballVelocity.y.toFixed(1)}, ${ballVelocity.z.toFixed(1)}
+            `;
+
+            if (isIntersecting && !isColliding) {
+                isColliding = true;
+                const hitDirection = new THREE.Vector3()
+                    .subVectors(ball.position, pyramid.position)
+                    .normalize();
+                
+                ballVelocity.set(
+                    hitDirection.x * 0.5,
+                    0.4,
+                    -0.6
+                );
+                
+                ballMaterial.color.setHex(0xffff00);
+                setTimeout(() => ballMaterial.color.setHex(0xff0000), 100);
+            } else if (!isIntersecting) {
+                isColliding = false;
+            }
+        }
+
+        function updateBall() {
+            ballVelocity.y -= GRAVITY;
+            ball.position.add(ballVelocity);
+
+            if (ball.position.y < 0.5) {
+                ball.position.y = 0.5;
+                ballVelocity.y = Math.abs(ballVelocity.y) * BOUNCE_FACTOR;
+            }
+
+            if (ball.position.z < -9) {
+                ball.position.z = -9;
+                ballVelocity.z = Math.abs(ballVelocity.z) * BOUNCE_FACTOR;
+            }
+
+            if (Math.abs(ball.position.x) > 9) {
+                ball.position.x = Math.sign(ball.position.x) * 9;
+                ballVelocity.x *= -BOUNCE_FACTOR;
+            }
+
+            if (ball.position.z > 10 || ball.position.y > 10) {
+                ball.position.set(0, 0.5, 0);
+                ballVelocity.set(0, 0, 0);
+            }
+
+            ballVelocity.multiplyScalar(0.99);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            updatePlayer();
+            checkCollision();
+            updateBall();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        let playerVelocityY = 0;
+        const MAX_JUMP_FORCE = 0.3;  // Maximum jump force (same as before)
+        
+        function calculateJumpForce() {
+            // Get horizontal distance to ball
+            const dx = ball.position.x - pyramid.position.x;
+            const dz = ball.position.z - pyramid.position.z;
+            const horizontalDist = Math.sqrt(dx * dx + dz * dz);
+            
+            // Only try to jump if ball is close enough horizontally
+            if (horizontalDist < 2) {  // Adjust this value as needed
+                // Calculate height difference to ball
+                const heightDiff = ball.position.y - pyramid.position.y;
+                
+                // Simple physics calculation for required initial velocity
+                // v0 = sqrt(2gh) where h is the height we want to reach
+                // Adding a small bonus to ensure we reach the ball
+                const requiredJumpForce = Math.sqrt(2 * GRAVITY * (heightDiff + 0.5));
+                
+                // Cap the jump force at our maximum
+                return Math.min(requiredJumpForce, MAX_JUMP_FORCE);
+            }
+            
+            // If ball is too far horizontally, return max jump
+            return MAX_JUMP_FORCE;
+        }
+        
+        document.addEventListener('keydown', (event) => {
+            if (event.code === 'Space' && pyramid.position.y <= 0.5) {
+                playerVelocityY = calculateJumpForce();
+            }
+            if (keys.hasOwnProperty(event.key.toLowerCase())) {
+                keys[event.key.toLowerCase()] = true;
+            }
+        });
+
+        function updatePlayer() {
+            const moveSpeed = 0.2;
+            const rotationSpeed = 0.1;
+            
+            // Apply gravity to player
+            playerVelocityY -= GRAVITY;
+            
+            // Update Y position
+            pyramid.position.y += playerVelocityY;
+            boundingCylinder.position.y += playerVelocityY;
+            
+            // Ground collision
+            if (pyramid.position.y <= 0.5) {
+                pyramid.position.y = 0.5;
+                boundingCylinder.position.y = 0.5;
+                playerVelocityY = 0;
+            }
+            
+            // Regular movement
+            if (keys.w) {
+                pyramid.position.z -= moveSpeed;
+                boundingCylinder.position.z -= moveSpeed;
+            }
+            if (keys.s) {
+                pyramid.position.z += moveSpeed;
+                boundingCylinder.position.z += moveSpeed;
+            }
+            if (keys.a) {
+                pyramid.position.x -= moveSpeed;
+                boundingCylinder.position.x -= moveSpeed;
+            }
+            if (keys.d) {
+                pyramid.position.x += moveSpeed;
+                boundingCylinder.position.x += moveSpeed;
+            }
+
+            if (keys.a || keys.d) {
+                const rotationAmount = (keys.d ? rotationSpeed : -rotationSpeed);
+                pyramid.rotation.y += rotationAmount;
+                boundingCylinder.rotation.y += rotationAmount;
+            }
+
+            // Keep within bounds
+            pyramid.position.x = Math.max(Math.min(pyramid.position.x, 9), -9);
+            pyramid.position.z = Math.max(Math.min(pyramid.position.z, 9), -9);
+            boundingCylinder.position.x = pyramid.position.x;
+            boundingCylinder.position.z = pyramid.position.z;
+        }
+
+        animate();
+    </script>
+</body>
+</html>

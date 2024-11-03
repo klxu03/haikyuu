@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Squash Game</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+        #instructions {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial;
+            font-size: 14px;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #score {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-family: Arial;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        #debug {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            font-family: monospace;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="instructions">
+        Player 1 (Green): WASD + SPACE to jump/serve<br>
+        Player 2 (Blue): Arrows + ENTER to jump/serve<br>
+        Hit front wall! Ball must bounce only once!
+    </div>
+    <div id="score">0 - 0</div>
+    <div id="debug"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        let score = { p1: 0, p2: 0 };
+        let currentServer = 'p1';
+        let ballInPlay = false;
+        let lastBounce = 0;
+        let lastHitPlayer = null;
+
+        const groundGeometry = new THREE.PlaneGeometry(30, 20);
+        const groundMaterial = new THREE.MeshPhongMaterial({ color: 0x333333 });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -0.5;
+        scene.add(ground);
+
+        function createPlayer(color, startX) {
+            const group = new THREE.Group();
+
+            const pyramidGeometry = new THREE.ConeGeometry(1, 2, 4);
+            const pyramidMaterial = new THREE.MeshPhongMaterial({ color });
+            const pyramid = new THREE.Mesh(pyramidGeometry, pyramidMaterial);
+            group.add(pyramid);
+
+            const cylinderGeometry = new THREE.CylinderGeometry(1, 1, 2, 32);
+            const cylinderMaterial = new THREE.MeshBasicMaterial({
+                transparent: true,
+                opacity: 0.2,
+                depthWrite: false
+            });
+            const boundingCylinder = new THREE.Mesh(cylinderGeometry, cylinderMaterial);
+            group.add(boundingCylinder);
+
+            group.position.set(startX, 1, 0);
+            scene.add(group);
+            
+            return { group, velocity: 0, startX };
+        }
+
+        const player1 = createPlayer(0x00ff00, -10);
+        const player2 = createPlayer(0x0000ff, 10);
+
+        const ballGeometry = new THREE.SphereGeometry(0.5);
+        const ballMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+        const ball = new THREE.Mesh(ballGeometry, ballMaterial);
+        scene.add(ball);
+
+        const collisionGeometry = new THREE.SphereGeometry(0.8);
+        const collisionMaterial = new THREE.MeshBasicMaterial({
+            transparent: true,
+            opacity: 0.2,
+            depthWrite: false
+        });
+        const collisionSphere = new THREE.Mesh(collisionGeometry, collisionMaterial);
+        ball.add(collisionSphere);
+
+        const frontWall = new THREE.Mesh(
+            new THREE.BoxGeometry(30, 15, 1),
+            new THREE.MeshPhongMaterial({ color: 0x808080 })
+        );
+        frontWall.position.z = -10;
+        frontWall.position.y = 2;
+        scene.add(frontWall);
+
+        const backWall = new THREE.Mesh(
+            new THREE.BoxGeometry(30, 15, 1),
+            new THREE.MeshBasicMaterial({ 
+                transparent: true,
+                opacity: 0,
+                depthWrite: false
+            })
+        );
+        backWall.position.z = 10;
+        backWall.position.y = 2;
+        scene.add(backWall);
+
+        const light = new THREE.PointLight(0xffffff, 1, 100);
+        light.position.set(0, 10, 10);
+        scene.add(light);
+        const ambientLight = new THREE.AmbientLight(0x404040);
+        scene.add(ambientLight);
+
+        camera.position.y = 15;
+        camera.position.z = 20;
+        camera.lookAt(0, 0, 0);
+
+        let ballVelocity = new THREE.Vector3(0, 0, 0);
+        const GRAVITY = 0.015;
+        const BOUNCE_FACTOR = 0.7;
+        const MAX_JUMP_FORCE = 0.3;
+        const MOVE_SPEED = 0.3;
+
+        const keys = {
+            w: false, s: false, a: false, d: false,
+            ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false
+        };
+
+        document.addEventListener('keydown', (event) => {
+            if (keys.hasOwnProperty(event.key)) {
+                keys[event.key] = true;
+            }
+            
+            if (event.code === 'Space' && player1.group.position.y <= 1) {
+                player1.velocity = calculateJumpForce(player1.group);
+            }
+            if (event.code === 'Enter' && player2.group.position.y <= 1) {
+                player2.velocity = calculateJumpForce(player2.group);
+            }
+
+            if (event.code === 'Space' && !ballInPlay && currentServer === 'p1') {
+                startServe('p1');
+            }
+            if (event.code === 'Enter' && !ballInPlay && currentServer === 'p2') {
+                startServe('p2');
+            }
+        });
+
+        document.addEventListener('keyup', (event) => {
+            if (keys.hasOwnProperty(event.key)) {
+                keys[event.key] = false;
+            }
+        });
+
+        function calculateJumpForce(player) {
+            const dx = ball.position.x - player.position.x;
+            const dz = ball.position.z - player.position.z;
+            const horizontalDist = Math.sqrt(dx * dx + dz * dz);
+            
+            if (horizontalDist < 3) {
+                const heightDiff = ball.position.y - player.position.y;
+                const requiredJumpForce = Math.sqrt(2 * GRAVITY * (heightDiff + 0.5));
+                return Math.min(requiredJumpForce, MAX_JUMP_FORCE);
+            }
+            return MAX_JUMP_FORCE;
+        }
+
+        function startServe(server) {
+            ballInPlay = true;
+            lastBounce = 0;
+            lastHitPlayer = server === 'p1' ? 1 : 2;  // Set initial hit to server
+            ballVelocity.set(0, 0.3, -0.5);
+        }
+
+        function resetPositions() {
+            player1.group.position.set(player1.startX, 1, 0);
+            player2.group.position.set(player2.startX, 1, 0);
+            player1.velocity = 0;
+            player2.velocity = 0;
+            
+            ballInPlay = false;
+            lastHitPlayer = null;
+            ball.position.y = 1;
+            ball.position.z = 0;
+            ballVelocity.set(0, 0, 0);
+            
+            if (currentServer === 'p1') {
+                ball.position.x = player1.startX + 2;
+            } else {
+                ball.position.x = player2.startX - 2;
+            }
+        }
+
+        function updatePlayer(player, controls) {
+            player.velocity -= GRAVITY;
+            player.group.position.y += player.velocity;
+            
+            if (player.group.position.y <= 1) {
+                player.group.position.y = 1;
+                player.velocity = 0;
+            }
+
+            if (controls.up) player.group.position.z -= MOVE_SPEED;
+            if (controls.down) player.group.position.z += MOVE_SPEED;
+            if (controls.left) player.group.position.x -= MOVE_SPEED;
+            if (controls.right) player.group.position.x += MOVE_SPEED;
+
+            player.group.position.x = Math.max(Math.min(player.group.position.x, 14), -14);
+            player.group.position.z = Math.max(Math.min(player.group.position.z, 9), -9);
+        }
+
+        function checkCollision(player, playerNum) {
+            const dx = ball.position.x - player.group.position.x;
+            const dy = ball.position.y - player.group.position.y;
+            const dz = ball.position.z - player.group.position.z;
+            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+            if (distance < 2 && ballInPlay && lastHitPlayer !== playerNum) {
+                const towardsFrontWall = -1;
+                const horizontalAngle = Math.random() * 0.2 - 0.1;
+                
+                ballVelocity.set(
+                    horizontalAngle,
+                    0.3,
+                    towardsFrontWall * 0.6
+                );
+
+                lastHitPlayer = playerNum;
+                ballMaterial.color.setHex(0xffff00);
+                setTimeout(() => ballMaterial.color.setHex(0xff0000), 100);
+            }
+        }
+
+        function updateBall() {
+            if (!ballInPlay) return;
+
+            ballVelocity.y -= GRAVITY;
+            ball.position.add(ballVelocity);
+
+            if (ball.position.y < 0.5) {
+                ball.position.y = 0.5;
+                ballVelocity.y = Math.abs(ballVelocity.y) * BOUNCE_FACTOR;
+                lastBounce++;
+                
+                if (lastBounce > 1) {
+                    if (lastHitPlayer === 2) {
+                        score.p2++;
+                        currentServer = 'p2';
+                    } else {
+                        score.p1++;
+                        currentServer = 'p1';
+                    }
+                    document.getElementById('score').textContent = `${score.p1} - ${score.p2}`;
+                    resetPositions();
+                }
+            }
+
+            if (ball.position.z < -9) {
+                ball.position.z = -9;
+                ballVelocity.z = Math.abs(ballVelocity.z) * BOUNCE_FACTOR;
+            }
+
+            if (ball.position.z > 9) {
+                ball.position.z = 9;
+                ballVelocity.z = -Math.abs(ballVelocity.z) * BOUNCE_FACTOR;
+            }
+
+            if (Math.abs(ball.position.x) > 14) {
+                ball.position.x = Math.sign(ball.position.x) * 14;
+                ballVelocity.x *= -BOUNCE_FACTOR;
+            }
+
+            if (ball.position.y > 15) {
+                if (ball.position.x < 0) {
+                    score.p2++;
+                    currentServer = 'p2';
+                } else {
+                    score.p1++;
+                    currentServer = 'p1';
+                }
+                document.getElementById('score').textContent = `${score.p1} - ${score.p2}`;
+                resetPositions();
+            }
+
+            ballVelocity.multiplyScalar(0.995);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            updatePlayer(player1, {
+                up: keys.w,
+                down: keys.s,
+                left: keys.a,
+                right: keys.d
+            });
+
+            updatePlayer(player2, {
+                up: keys.ArrowUp,
+                down: keys.ArrowDown,
+                left: keys.ArrowLeft,
+                right: keys.ArrowRight
+            });
+
+            checkCollision(player1, 1);
+            checkCollision(player2, 2);
+            updateBall();
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        resetPositions();
+        animate();
+    </script>
+</body>
+</html>
