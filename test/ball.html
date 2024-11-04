@@ -52,15 +52,19 @@
         ground.position.y = -0.5;
         scene.add(ground);
 
+        const playerRadius = 0.5;
+        const playerHeight = 1;
+        const ballRadius = 0.8;
+
         // Create player pyramid
-        const pyramidGeometry = new THREE.ConeGeometry(0.5, 1, 4); // radius, height, number of sides (4 for pyramid)
+        const pyramidGeometry = new THREE.ConeGeometry(playerRadius, playerHeight, 4); // radius, height, number of sides (4 for pyramid)
         const pyramidMaterial = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
         const pyramid = new THREE.Mesh(pyramidGeometry, pyramidMaterial);
         scene.add(pyramid);
         pyramid.position.set(0, 0.5, 5);
 
         // Create invisible cylinder for collision (bounding cylinder)
-        const cylinderGeometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
+        const cylinderGeometry = new THREE.CylinderGeometry(playerRadius, playerRadius, playerHeight, 32);
         const cylinderMaterial = new THREE.MeshBasicMaterial({ 
             transparent: true, 
             opacity: 0.2,  // Slightly visible for debugging, set to 0 for invisible
@@ -78,7 +82,7 @@
         ball.position.set(0, 0.5, 0);
 
         // Create invisible collision sphere
-        const collisionGeometry = new THREE.SphereGeometry(0.8);
+        const collisionGeometry = new THREE.SphereGeometry(ballRadius);
         const collisionMaterial = new THREE.MeshBasicMaterial({ 
             transparent: true, 
             opacity: 0.2,  // Slightly visible for debugging, set to 0 for invisible
@@ -166,20 +170,16 @@
         let isColliding = false;
 
         function checkCollision() {
-            // Create bounding cylinders for collision check
-            // We'll approximate cylinder collision using sphere intersection at multiple points
-            const cylinderBase = new THREE.Sphere(
-                new THREE.Vector3(
-                    boundingCylinder.position.x,
-                    boundingCylinder.position.y,
-                    boundingCylinder.position.z
-                ),
-                0.5
-            );
-            
-            const ballBoundingSphere = new THREE.Sphere(ball.position, 0.8);
+            const dx = ball.position.x - boundingCylinder.position.x;
+            const dz = ball.position.z - boundingCylinder.position.z;
+            const distance = Math.sqrt(dx * dx + dz * dz);
 
-            const isIntersecting = cylinderBase.intersectsSphere(ballBoundingSphere);
+            let isIntersecting = false;
+            if (distance <= (playerRadius + ballRadius)) {
+                if (ball.position.y - boundingCylinder.position.y <= playerHeight && ball.position.y >= boundingCylinder.position.y) {
+                    isIntersecting = true;
+                }
+            }
             
             debugDiv.textContent = `
                 Collision: ${isIntersecting}
@@ -191,7 +191,7 @@
             if (isIntersecting && !isColliding) {
                 isColliding = true;
                 const hitDirection = new THREE.Vector3()
-                    .subVectors(ball.position, pyramid.position)
+                    .subVectors(ball.position, boundingCylinder.position)
                     .normalize();
                 
                 ballVelocity.set(

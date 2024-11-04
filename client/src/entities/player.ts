@@ -19,6 +19,17 @@ interface UpdatePosition {
     z?: number;
 }
 
+interface JumpPayload {
+    dX: number;
+    dZ: number;
+}
+
+interface JumpCollision {
+    ballVelocity: [number, number, number] | null; // null if ball is not being hit
+    jumpVelocity: number;
+    rotation: number; // ending rotation of the player, in radians
+}
+
 interface ServerToClientEvents {
     player_id: (socketId: string) => void;
 }
@@ -26,6 +37,7 @@ interface ServerToClientEvents {
 interface ClientToServerEvents {
     client_movement: (movement: Position) => void;
     client_animation: (animation: string) => void;
+    client_jump: (payload: JumpPayload, callback: (response: JumpCollision) => void) => void;
 }
 
 class Player {
@@ -34,8 +46,7 @@ class Player {
     #inputManager: InputManager;
 
     readonly #moveSpeed = 0.1;
-    readonly #jumpSpeed = this.#moveSpeed * 0.5;
-    readonly #fallSpeed = this.#jumpSpeed * 1.35;
+    readonly #moveSpeedDiagonal = this.#moveSpeed * Math.sqrt(2) / 2;
 
     readonly #groundHeight = 0;
 
@@ -54,6 +65,8 @@ class Player {
     #socket: Socket<ServerToClientEvents, ClientToServerEvents>;
 
     #renderer: Renderer;
+
+    #boundingCylinder: THREE.Mesh;
 
     constructor(position: Position = { x: 0, y: this.#groundHeight, z: 0 }, isMainPlayer: boolean = false) {
         this.position = position;
@@ -84,15 +97,30 @@ class Player {
         window.addEventListener("keyup", this.#handleKeyUp.bind(this));
         
         this.#socket = EntityManager.getInstance.socket;
+
+        const playerRadius = 0.5;
+        const playerHeight = false ? 3.1 : 0.1;
+        const cylinderGeometry = new THREE.CylinderGeometry(playerRadius, playerRadius, playerHeight, 32);
+        const cylinderMaterial = new THREE.MeshBasicMaterial({ 
+            transparent: true, 
+            opacity: 0.2,
+            depthWrite: false 
+        });
+        this.#boundingCylinder = new THREE.Mesh(cylinderGeometry, cylinderMaterial);
+        this.#renderer.scene.add(this.#boundingCylinder);
     }
 
     /**
      * Update the player's position and animations
      * @param deltaTime The time since the last update
      */
-    public update(deltaTime: number, position: Position) {
-        this.handleMovement(position);
+    public update(deltaTime: number, position: Position, jumpVelocity: number) {
+        this.handleMovement(position, jumpVelocity);
         this.#updateAnimations(deltaTime);
+
+        const worldPosition = new THREE.Vector3();
+        this.gltfResult.scene.getWorldPosition(worldPosition);
+        this.#boundingCylinder.position.copy(worldPosition);
     }
 
     #handleKeyUp(event: KeyboardEvent) {
@@ -104,12 +132,48 @@ class Player {
         }
     }
 
-    public handleMovement(position: Position) {
+    #jumpVelocity = 0;
+
+    public async handleJump(jumpVelocity: number = 0, rotation: number = -1) {
+        if (this.#isMainPlayer) {
+            const jumpMagnitude = 0.42;
+            const dX = Math.sin(this.gltfResult.scene.rotation.y) * jumpMagnitude;
+            const dZ = Math.cos(this.gltfResult.scene.rotation.y) * jumpMagnitude;
+
+            await new Promise<JumpCollision>((resolve, reject) => {
+                this.#socket.emit('client_jump', { dX, dZ }, (response: JumpCollision) => {
+                    this.#jumpVelocity = response.jumpVelocity;
+
+                    console.log("jumpCollision", response);
+
+                    if (response.rotation !== -1) {
+                        this.gltfResult.scene.rotation.y = response.rotation;
+                    }
+
+                    resolve(response);
+                });
+            });
+
+            this.updatePositionDeltas({ x: dX, y: 0, z: dZ });
+        } else {
+            this.#jumpVelocity = jumpVelocity;
+
+            if (rotation !== -1) {
+                console.log("server sent rotation", rotation);
+                this.gltfResult.scene.rotation.y = rotation;
+            }
+        }
+
+        this.#queueAnimation("jump");
+    }
+
+    public handleMovement(position: Position, jumpVelocity: number) {
         if (this.#currentlyPlayingAnimationChain) return;
         let changedPosition = false;
 
         let moveX = 0;
         let moveZ = 0;
+        this.#jumpVelocity = jumpVelocity;
 
         if (this.#isMainPlayer) {
             if (this.#inputManager.keysPressed.w) moveZ -= this.#moveSpeed;
@@ -121,7 +185,7 @@ class Player {
             if (this.#inputManager.keysPressed.space) {
                 this.#animationChain!.stop();
                 this.#currentlyPlayingAnimationChain = true;
-                this.#queueAnimation("jump");
+                this.handleJump();
             }
         } 
 
@@ -138,15 +202,20 @@ class Player {
         }
 
         if (moveX !== 0 || moveZ !== 0) {
-            if (this.#currentlyPlayingIdle) {
-                this.#queueAnimation("slow_run");
-            }
-            this.updatePositionDeltas({ x: moveX, z: moveZ });
+            console.log("moveX", moveX, "moveZ", moveZ, "moveSpeed", this.#moveSpeed, "moveSpeedDiagonal", this.#moveSpeedDiagonal);
+            if ((Math.abs(Math.abs(moveX) - this.#moveSpeed) < 0.001 || Math.abs(Math.abs(moveZ) - this.#moveSpeed) < 0.001) || 
+                (Math.abs(Math.abs(moveX) - this.#moveSpeedDiagonal) < 0.001 && Math.abs(Math.abs(moveZ) - this.#moveSpeedDiagonal) < 0.001)) {
+                if (this.#currentlyPlayingIdle) {
+                    this.#queueAnimation("slow_run");
+                }
 
-            // Calculate rotation based on movement direction
-            const angle = Math.atan2(moveX, moveZ);
-            this.gltfResult.scene.rotation.y = angle;
-            changedPosition = true;
+                // Calculate rotation based on movement direction
+                const angle = Math.atan2(moveX, moveZ);
+                this.gltfResult.scene.rotation.y = angle;
+                changedPosition = true;
+            }
+
+            this.updatePositionDeltas({ x: moveX, z: moveZ });
         }
 
         if (changedPosition) {
@@ -164,7 +233,12 @@ class Player {
         if (position.z !== undefined) this.position.z += position.z;
 
         this.gltfResult.scene.position.add(new THREE.Vector3(position.x ?? 0, position.y ?? 0, position.z ?? 0));
-        if (this.#isMainPlayer) this.#socket.emit("client_movement", this.position);
+        if (this.#isMainPlayer) {
+            // if jumping, don't need to send movement updates
+            if (position.y !== undefined && position.y !== 0) return;
+
+            this.#socket.emit("client_movement", this.position);
+        }
     }
 
     #initAnimationChainManager() {
@@ -178,11 +252,7 @@ class Player {
             this.#currentlyPlayingAnimationChain = true;
             this.#jumpTime = 0;
             // move the player up a bit to account for jumping forward
-            const jumpMagnitude = 0.42;
-            const dX = Math.sin(this.gltfResult.scene.rotation.y) * jumpMagnitude;
-            const dZ = Math.cos(this.gltfResult.scene.rotation.y) * jumpMagnitude;
-            this.updatePositionDeltas({ x: dX, y: 0, z: dZ });
-
+            console.log("starting jump rotation", this.gltfResult.scene.rotation.y);
             this.gltfResult.scene.rotation.y += THREE.MathUtils.degToRad(jumpAnimationOptions.rotation!);
         }
 
@@ -190,19 +260,17 @@ class Player {
             this.#jumpTime += deltaTime;
             if (this.#jumpTime < 0.54 - 0.09) return;
 
-            if (this.#jumpTime < 0.85 - 0.1) {
-                this.updatePositionDeltas({ y: this.#jumpSpeed });
+            if (this.#jumpTime > 0.75 && this.position.y - this.#groundHeight <= -this.#jumpVelocity) {
+                this.updatePositionDeltas({ y: -(this.position.y - this.#groundHeight) });
             } else {
-                if (this.position.y - this.#groundHeight <= this.#fallSpeed) {
-                    this.position.y = this.#groundHeight;
-                } else {
-                    this.updatePositionDeltas({ y: -this.#fallSpeed });
-                }
+                this.updatePositionDeltas({ y: this.#jumpVelocity });
+                this.#jumpVelocity -= EntityManager.getInstance.gravity;
             }
         }
 
         let end = () => {
             this.gltfResult.scene.rotation.y -= THREE.MathUtils.degToRad(jumpAnimationOptions.rotation!);
+            console.log("ending jump rotation", this.gltfResult.scene.rotation.y);
             this.#currentlyPlayingAnimationChain = false;
         }
         
@@ -231,12 +299,14 @@ class Player {
      */
     public async startAnimation(name: string) {
         if (name === "slow_run") return;
+        if (name === "jump") return;
         console.log("startAnimation", name);
 
         await this.#queueAnimation(name);
     }
 
     #jumpTime = 0;
+
     async #queueAnimation(name: string) {
         if (this.#animationMixer && this.#animationChainManager.has(name)) {
             try {

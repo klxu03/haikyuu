@@ -1,5 +1,12 @@
 import Player, { Position } from "./player";
+import Ball from "./ball";
 import { io, Socket } from "socket.io-client";
+
+interface JumpCollision {
+    ballVelocity: [number, number, number] | null; // null if ball is not being hit
+    jumpVelocity: number;
+    rotation: number; // ending rotation of the player, in radians
+}
 
 interface ServerToClientEvents {
     position_update: (socketId: string, position: Position) => void;
@@ -9,6 +16,8 @@ interface ServerToClientEvents {
     player_disconnected: (socketId: string) => void;
     initial_players: (players: Record<string, Player>) => void;
     error: (errorMessage: string) => void;
+    player_jump: (socketId: string, jumpCollision: JumpCollision) => void;
+    ball_position: (position: Position) => void;
 }
 
 interface ClientToServerEvents {
@@ -20,12 +29,15 @@ class EntityManager {
     static #instance: EntityManager;
     mainPlayer!: Player;
     players: Map<string, [Player, Position]>;
+    ball: Ball;
+    public readonly gravity = 0.015;
 
     socket: Socket<ServerToClientEvents, ClientToServerEvents>;
     socketId!: string;
 
     constructor() {
         EntityManager.#instance = this;
+        this.ball = new Ball();
 
         this.socket = io("http://localhost:3000", {
             withCredentials: true,
@@ -77,6 +89,14 @@ class EntityManager {
                 player[0].startAnimation(animation);
             }
         });
+
+        this.socket.on("player_jump", (socketId: string, jumpCollision: JumpCollision) => {
+            if (socketId === this.socketId) return;
+            const player = this.players.get(socketId);
+            if (player) {
+                player[0].handleJump(jumpCollision.jumpVelocity, jumpCollision.rotation);
+            }
+        });
     }
 
     public static get getInstance(): EntityManager {
@@ -85,11 +105,11 @@ class EntityManager {
 
     public update(deltaTime: number) {
         if (this.mainPlayer) {
-            this.mainPlayer.update(deltaTime, this.mainPlayer.position);
+            this.mainPlayer.update(deltaTime, this.mainPlayer.position, 0.2);
         }
 
         for (const player of this.players.values()) {
-            player[0].update(deltaTime, player[1]);
+            player[0].update(deltaTime, player[1], 0.2);
         }
     }
 }
