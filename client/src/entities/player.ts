@@ -202,7 +202,6 @@ class Player {
         }
 
         if (moveX !== 0 || moveZ !== 0) {
-            console.log("moveX", moveX, "moveZ", moveZ, "moveSpeed", this.#moveSpeed, "moveSpeedDiagonal", this.#moveSpeedDiagonal);
             if ((Math.abs(Math.abs(moveX) - this.#moveSpeed) < 0.001 || Math.abs(Math.abs(moveZ) - this.#moveSpeed) < 0.001) || 
                 (Math.abs(Math.abs(moveX) - this.#moveSpeedDiagonal) < 0.001 && Math.abs(Math.abs(moveZ) - this.#moveSpeedDiagonal) < 0.001)) {
                 if (this.#currentlyPlayingIdle) {

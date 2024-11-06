@@ -33,6 +33,7 @@ interface ServerToClientEvents {
     error: (errorMessage: string) => void;
     player_jump: (socketId: string, jumpCollision: JumpCollision) => void;
     ball_position: (position: Position) => void;
+    ball_delta: (delta: [number, number, number]) => void;
 }
 
 interface ClientToServerEvents {
@@ -51,6 +52,7 @@ class GameState {
     ballVelocity: [number, number, number];
 
     readonly GRAVITY = 0.015;
+    readonly BALL_GRAVITY = 0.007;
     readonly BALL_RADIUS = 0.2;
 
     constructor(socket: Server<ClientToServerEvents, ServerToClientEvents>) {
@@ -60,8 +62,8 @@ class GameState {
         this.#socket = socket;
 
         this.ballActive = false;
-        this.ballPosition = { x: 0, y: 0, z: 0 };
-        this.ballVelocity = [0, 0, 0];
+        this.ballPosition = { x: 0, y: 4, z: 0 };
+        this.ballVelocity = [0, 0.2, 0];
     }
 
     public addPlayer(id: string): boolean {
@@ -82,26 +84,36 @@ class GameState {
             return;
         }
 
-        this.ballVelocity[1] -= this.GRAVITY;
+        this.ballVelocity[1] -= this.BALL_GRAVITY;
 
         // add for each velocity component of ball to its position
         this.ballPosition.x += this.ballVelocity[0];
         this.ballPosition.y += this.ballVelocity[1];
         this.ballPosition.z += this.ballVelocity[2];
 
-        this.#socket.emit("ball_position", this.ballPosition);
-
-        if (this.ballPosition.y < 0.5) {
+        if (this.ballPosition.y < 0.1) {
             console.log("ball hit the ground");
-            this.ballVelocity = [0, 0, 0];
+            this.ballVelocity = [0, 0.1, 0];
+            this.ballActive = false;
+            setTimeout(() => {
+                this.ballActive = true;
+                this.ballPosition.y = 4;
+                this.#socket.emit("ball_position", this.ballPosition);
+                this.#simulateBallStep();
+            }, 1000);
         }
+
+        this.#socket.emit("ball_position", this.ballPosition);
 
         // multiply each component in ballVelocity by 0.99 to simulate drag
         this.ballVelocity = [this.ballVelocity[0] * 0.99, this.ballVelocity[1] * 0.99, this.ballVelocity[2] * 0.99];
 
-        setImmediate(() => {
+        // setImmediate(() => {
+        // });
+
+        setTimeout(() => {
             this.#simulateBallStep();
-        });
+        }, 30);
     }
 }
 
@@ -115,6 +127,7 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(server.server 
 });
 
 const gameState = new GameState(io);
+gameState.startBallSimulation();
 
 await server.register(cors, {
     origin: "http://localhost:5173",

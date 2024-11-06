@@ -30,6 +30,7 @@ class EntityManager {
     mainPlayer!: Player;
     players: Map<string, [Player, Position]>;
     ball: Ball;
+    #ballPosition: Position;
     public readonly gravity = 0.015;
 
     socket: Socket<ServerToClientEvents, ClientToServerEvents>;
@@ -38,6 +39,7 @@ class EntityManager {
     constructor() {
         EntityManager.#instance = this;
         this.ball = new Ball();
+        this.#ballPosition = { x: 0, y: 0.5, z: 0 };
 
         this.socket = io("http://localhost:3000", {
             withCredentials: true,
@@ -97,6 +99,11 @@ class EntityManager {
                 player[0].handleJump(jumpCollision.jumpVelocity, jumpCollision.rotation);
             }
         });
+
+        this.socket.on("ball_position", (position: Position) => {
+            console.log("server updated ball_position", position);
+            this.#ballPosition = position;
+        });
     }
 
     public static get getInstance(): EntityManager {
@@ -111,6 +118,9 @@ class EntityManager {
         for (const player of this.players.values()) {
             player[0].update(deltaTime, player[1], 0.2);
         }
+
+        // update ball position
+        this.ball.updatePosition(this.#ballPosition);
     }
 }
 

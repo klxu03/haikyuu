@@ -43,7 +43,7 @@ class PlayerManager {
         const player = this.#players.get(id);
         if (player) {
             player.position = position;
-            console.log("Updating player", id, "position to", position);
+            // console.log("Updating player", id, "position to", position);
         }
     }
 
@@ -82,7 +82,8 @@ class PlayerManager {
 
             jumpCollision.rotation = Math.atan2(jumpVector[0], jumpVector[2]);
 
-            const heightDiff = ballPosition.y - playerPosition.y;
+            const heightDiff = (ballPosition.y - 0.5) - playerPosition.y;
+            console.log("heightDiff", heightDiff);
             const requiredJumpForce = Math.sqrt(2 * gravity * (heightDiff + 0.5));
             jumpCollision.jumpVelocity = Math.min(requiredJumpForce, jumpCollision.jumpVelocity);
         }

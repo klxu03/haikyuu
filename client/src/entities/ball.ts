@@ -20,6 +20,11 @@ class Ball {
         this.#renderer = Renderer.getInstance;
         this.#renderer.scene.add(this.#ball);
     }
+
+    public updatePosition(position: Position) {
+        this.position = position;
+        this.#ball.position.set(this.position.x, this.position.y, this.position.z);
+    }
 }
 
 export default Ball;
