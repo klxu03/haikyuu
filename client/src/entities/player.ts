@@ -75,7 +75,7 @@ class Player {
      */
     #team: number;
 
-    constructor(position: Position = { x: 0, y: this.#groundHeight, z: 0 }, isMainPlayer: boolean = false, team: number = 0) {
+    constructor(position: Position = { x: 0, y: this.#groundHeight, z: 0 }, isMainPlayer: boolean = false, team: number = 1) {
         this.position = position;
         this.gltfResult = AssetManager.getInstance.getPlayerObject();
         this.gltfResult.scene.position.set(this.position.x, this.position.y, this.position.z);
@@ -86,6 +86,7 @@ class Player {
         console.log("constructed main player", isMainPlayer, "placed at position", this.position);
 
         this.#isMainPlayer = isMainPlayer;
+        this.#team = team;
 
         this.#inputManager = InputManager.getInstance;
 
@@ -158,7 +159,7 @@ class Player {
 
             rotation = Math.atan2(jumpVector[0], jumpVector[2]);
 
-            this.#ball.velocity = [jumpVector[0] * 0.5, 0.4, this.#team === 1 ? -0.6 : 0.6];
+            this.#ball.updateVelocity([jumpVector[0] * 0.5, 0.4, this.#team === 1 ? -0.3 : 0.3]);
 
             const heightDiff = this.#ball.position.y - this.position.y;
             const requiredJumpForce = Math.sqrt(2 * EntityManager.getInstance.gravity * (heightDiff + 0.5));

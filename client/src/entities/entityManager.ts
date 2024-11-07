@@ -32,13 +32,14 @@ class EntityManager {
     players: Map<string, [Player, Position]>;
     ball: Ball;
     public readonly gravity = 0.015;
+    public readonly ballGravity = 0.03;
 
     socket: Socket<ServerToClientEvents, ClientToServerEvents>;
     socketId!: string;
 
     constructor() {
         EntityManager.#instance = this;
-        this.ball = new Ball();
+        this.ball = new Ball(this.ballGravity);
 
         this.socket = io("http://localhost:3000", {
             withCredentials: true,
@@ -113,7 +114,6 @@ class EntityManager {
             player[0].update(deltaTime, player[1], 0.2);
         }
 
-        // update ball position
         this.ball.updatePosition();
     }
 }
