@@ -6,6 +6,7 @@ import AnimationChain, { type AnimationLink } from "../assets/animationChain";
 import EntityManager from "./entityManager";
 import { Socket } from "socket.io-client";
 import Renderer from "../render";
+import Ball from "./ball";
 
 interface Position {
     x: number;
@@ -20,14 +21,13 @@ interface UpdatePosition {
 }
 
 interface JumpPayload {
-    dX: number;
-    dZ: number;
+    rotation: number; // ending rotation of the player, in radians, -1 means no change
+    jumpVelocity: number;
 }
 
-interface JumpCollision {
-    ballVelocity: [number, number, number] | null; // null if ball is not being hit
-    jumpVelocity: number;
-    rotation: number; // ending rotation of the player, in radians
+interface HitBallPayload {
+    ballPosition: Position;
+    initialBallVelocity: [number, number, number];
 }
 
 interface ServerToClientEvents {
@@ -37,7 +37,8 @@ interface ServerToClientEvents {
 interface ClientToServerEvents {
     client_movement: (movement: Position) => void;
     client_animation: (animation: string) => void;
-    client_jump: (payload: JumpPayload, callback: (response: JumpCollision) => void) => void;
+    client_jump: (payload: JumpPayload) => void;
+    client_hit_ball: (payload: HitBallPayload) => void;
 }
 
 class Player {
@@ -67,8 +68,14 @@ class Player {
     #renderer: Renderer;
 
     #boundingCylinder: THREE.Mesh;
+    #ball: Ball;
 
-    constructor(position: Position = { x: 0, y: this.#groundHeight, z: 0 }, isMainPlayer: boolean = false) {
+    /**
+     * The team number of the player. 1 means team that hits towards negative z, 2 means team that hits towards positive z
+     */
+    #team: number;
+
+    constructor(position: Position = { x: 0, y: this.#groundHeight, z: 0 }, isMainPlayer: boolean = false, team: number = 0) {
         this.position = position;
         this.gltfResult = AssetManager.getInstance.getPlayerObject();
         this.gltfResult.scene.position.set(this.position.x, this.position.y, this.position.z);
@@ -97,6 +104,7 @@ class Player {
         window.addEventListener("keyup", this.#handleKeyUp.bind(this));
         
         this.#socket = EntityManager.getInstance.socket;
+        this.#ball = EntityManager.getInstance.ball;
 
         const playerRadius = 0.5;
         const playerHeight = false ? 3.1 : 0.1;
@@ -134,27 +142,46 @@ class Player {
 
     #jumpVelocity = 0;
 
+    /**
+     * Calculate the rotation of the player to face the ball while jumping
+     * @returns The rotation of the player to face the ball (before and after jump), in radians
+     * @returns -1 if the player will not hit the ball
+     */
+    #calculateJumpPayload(): JumpPayload {
+        let rotation = -1;
+        const distance = Math.sqrt((this.position.x - this.#ball.position.x) ** 2 + (this.position.z - this.#ball.position.z) ** 2);
+
+        if (distance <= 2 && this.#ball.position.y <= 4) {
+            let jumpVector = [this.#ball.position.x - this.position.x, this.#ball.position.y - this.position.y, this.#ball.position.z - this.position.z];
+            const jumpMagnitude = Math.sqrt(jumpVector[0] ** 2 + jumpVector[1] ** 2 + jumpVector[2] ** 2);
+            jumpVector = [jumpVector[0] / jumpMagnitude, jumpVector[1] / jumpMagnitude, jumpVector[2] / jumpMagnitude];
+
+            rotation = Math.atan2(jumpVector[0], jumpVector[2]);
+
+            this.#ball.velocity = [jumpVector[0] * 0.5, 0.4, this.#team === 1 ? -0.6 : 0.6];
+
+            const heightDiff = this.#ball.position.y - this.position.y;
+            const requiredJumpForce = Math.sqrt(2 * EntityManager.getInstance.gravity * (heightDiff + 0.5));
+            this.#jumpVelocity = Math.min(0.2, requiredJumpForce);
+        }
+
+        return { rotation, jumpVelocity: this.#jumpVelocity };
+    }
+
     public async handleJump(jumpVelocity: number = 0, rotation: number = -1) {
         if (this.#isMainPlayer) {
             const jumpMagnitude = 0.42;
             const dX = Math.sin(this.gltfResult.scene.rotation.y) * jumpMagnitude;
             const dZ = Math.cos(this.gltfResult.scene.rotation.y) * jumpMagnitude;
 
-            await new Promise<JumpCollision>((resolve, reject) => {
-                this.#socket.emit('client_jump', { dX, dZ }, (response: JumpCollision) => {
-                    this.#jumpVelocity = response.jumpVelocity;
-
-                    console.log("jumpCollision", response);
-
-                    if (response.rotation !== -1) {
-                        this.gltfResult.scene.rotation.y = response.rotation;
-                    }
-
-                    resolve(response);
-                });
-            });
-
             this.updatePositionDeltas({ x: dX, y: 0, z: dZ });
+
+            const jumpPayload = this.#calculateJumpPayload();
+            if (jumpPayload.rotation !== -1) {
+                this.gltfResult.scene.rotation.y = jumpPayload.rotation;
+            }
+
+            this.#socket.emit("client_jump", jumpPayload);
         } else {
             this.#jumpVelocity = jumpVelocity;
 

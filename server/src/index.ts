@@ -13,14 +13,13 @@ interface Position {
 }
 
 interface JumpPayload {
-    dX: number;
-    dZ: number;
+    rotation: number; // ending rotation of the player, in radians, -1 means no change
+    jumpVelocity: number;
 }
 
-interface JumpCollision {
-    ballVelocity: [number, number, number] | null; // null if ball is not being hit
-    jumpVelocity: number;
-    rotation: number; // ending rotation of the player, in radians
+interface HitBallPayload {
+    ballPosition: Position;
+    initialBallVelocity: [number, number, number];
 }
 
 interface ServerToClientEvents {
@@ -31,15 +30,15 @@ interface ServerToClientEvents {
     player_disconnected: (socketId: string) => void;
     initial_players: (players: Record<string, Player>) => void;
     error: (errorMessage: string) => void;
-    player_jump: (socketId: string, jumpCollision: JumpCollision) => void;
-    ball_position: (position: Position) => void;
-    ball_delta: (delta: [number, number, number]) => void;
+    player_jump: (socketId: string, jumpPayload: JumpPayload) => void;
+    player_hit_ball: (socketId: string, hitBallPayload: HitBallPayload) => void;
 }
 
 interface ClientToServerEvents {
     client_movement: (movement: Position) => void;
     client_animation: (animation: string) => void;
-    client_jump: (payload: JumpPayload, callback: (response: JumpCollision) => void) => void;
+    client_jump: (payload: JumpPayload) => void;
+    client_hit_ball: (payload: HitBallPayload) => void;
 }
 
 class GameState {
@@ -52,7 +51,7 @@ class GameState {
     ballVelocity: [number, number, number];
 
     readonly GRAVITY = 0.015;
-    readonly BALL_GRAVITY = 0.007;
+    readonly BALL_GRAVITY = 0.015;
     readonly BALL_RADIUS = 0.2;
 
     constructor(socket: Server<ClientToServerEvents, ServerToClientEvents>) {
@@ -83,33 +82,6 @@ class GameState {
         if (!this.ballActive) {
             return;
         }
-
-        this.ballVelocity[1] -= this.BALL_GRAVITY;
-
-        // add for each velocity component of ball to its position
-        this.ballPosition.x += this.ballVelocity[0];
-        this.ballPosition.y += this.ballVelocity[1];
-        this.ballPosition.z += this.ballVelocity[2];
-
-        if (this.ballPosition.y < 0.1) {
-            console.log("ball hit the ground");
-            this.ballVelocity = [0, 0.1, 0];
-            this.ballActive = false;
-            setTimeout(() => {
-                this.ballActive = true;
-                this.ballPosition.y = 4;
-                this.#socket.emit("ball_position", this.ballPosition);
-                this.#simulateBallStep();
-            }, 1000);
-        }
-
-        this.#socket.emit("ball_position", this.ballPosition);
-
-        // multiply each component in ballVelocity by 0.99 to simulate drag
-        this.ballVelocity = [this.ballVelocity[0] * 0.99, this.ballVelocity[1] * 0.99, this.ballVelocity[2] * 0.99];
-
-        // setImmediate(() => {
-        // });
 
         setTimeout(() => {
             this.#simulateBallStep();
@@ -168,10 +140,12 @@ io.on("connection", (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         socket.broadcast.emit("player_disconnected", socket.id);
     });
 
-    socket.on("client_jump", (payload: JumpPayload, callback: (response: JumpCollision) => void) => {
-        const jumpCollision = gameState.playerManager.calculateJumpCollision(socket.id, gameState.GRAVITY, gameState.ballPosition, payload);
-        callback(jumpCollision);
-        socket.broadcast.emit("player_jump", socket.id, jumpCollision);
+    socket.on("client_jump", (payload: JumpPayload) => {
+        socket.broadcast.emit("player_jump", socket.id, payload);
+    });
+
+    socket.on("client_hit_ball", (payload: HitBallPayload) => {
+        socket.broadcast.emit("player_hit_ball", socket.id, payload);
     });
 });
 
@@ -183,4 +157,4 @@ try {
     process.exit(1);
 }
 
-export type { JumpPayload, JumpCollision, Position };
+export type { Position };

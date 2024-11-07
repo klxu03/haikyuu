@@ -2,10 +2,14 @@ import Player, { Position } from "./player";
 import Ball from "./ball";
 import { io, Socket } from "socket.io-client";
 
-interface JumpCollision {
-    ballVelocity: [number, number, number] | null; // null if ball is not being hit
+interface JumpPayload {
+    rotation: number; // ending rotation of the player, in radians, -1 means no change
     jumpVelocity: number;
-    rotation: number; // ending rotation of the player, in radians
+}
+
+interface HitBallPayload {
+    ballPosition: Position;
+    initialBallVelocity: [number, number, number];
 }
 
 interface ServerToClientEvents {
@@ -16,21 +20,17 @@ interface ServerToClientEvents {
     player_disconnected: (socketId: string) => void;
     initial_players: (players: Record<string, Player>) => void;
     error: (errorMessage: string) => void;
-    player_jump: (socketId: string, jumpCollision: JumpCollision) => void;
-    ball_position: (position: Position) => void;
+    player_jump: (socketId: string, jumpPayload: JumpPayload) => void;
+    player_hit_ball: (socketId: string, hitBallPayload: HitBallPayload) => void;
 }
 
-interface ClientToServerEvents {
-    client_movement: (movement: Position) => void;
-    client_animation: (animation: string) => void;
-}
+interface ClientToServerEvents { }
 
 class EntityManager {
     static #instance: EntityManager;
     mainPlayer!: Player;
     players: Map<string, [Player, Position]>;
     ball: Ball;
-    #ballPosition: Position;
     public readonly gravity = 0.015;
 
     socket: Socket<ServerToClientEvents, ClientToServerEvents>;
@@ -39,7 +39,6 @@ class EntityManager {
     constructor() {
         EntityManager.#instance = this;
         this.ball = new Ball();
-        this.#ballPosition = { x: 0, y: 0.5, z: 0 };
 
         this.socket = io("http://localhost:3000", {
             withCredentials: true,
@@ -92,17 +91,12 @@ class EntityManager {
             }
         });
 
-        this.socket.on("player_jump", (socketId: string, jumpCollision: JumpCollision) => {
+        this.socket.on("player_jump", (socketId: string, jumpPayload: JumpPayload) => {
             if (socketId === this.socketId) return;
             const player = this.players.get(socketId);
             if (player) {
-                player[0].handleJump(jumpCollision.jumpVelocity, jumpCollision.rotation);
+                player[0].handleJump(jumpPayload.jumpVelocity, jumpPayload.rotation);
             }
-        });
-
-        this.socket.on("ball_position", (position: Position) => {
-            console.log("server updated ball_position", position);
-            this.#ballPosition = position;
         });
     }
 
@@ -120,7 +114,7 @@ class EntityManager {
         }
 
         // update ball position
-        this.ball.updatePosition(this.#ballPosition);
+        this.ball.updatePosition();
     }
 }
 
