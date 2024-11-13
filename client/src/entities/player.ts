@@ -154,12 +154,12 @@ class Player {
 
         if (distance <= 2 && this.#ball.position.y <= 4) {
             let jumpVector = [this.#ball.position.x - this.position.x, this.#ball.position.y - this.position.y, this.#ball.position.z - this.position.z];
-            const jumpMagnitude = Math.sqrt(jumpVector[0] ** 2 + jumpVector[1] ** 2 + jumpVector[2] ** 2);
+            const jumpMagnitude = Math.sqrt(jumpVector[0] ** 2 + jumpVector[2] ** 2);
             jumpVector = [jumpVector[0] / jumpMagnitude, jumpVector[1] / jumpMagnitude, jumpVector[2] / jumpMagnitude];
 
             rotation = Math.atan2(jumpVector[0], jumpVector[2]);
 
-            this.#ball.updateVelocity([jumpVector[0] * 0.5, 0.4, this.#team === 1 ? -0.3 : 0.3]);
+            this.#ball.updateVelocity([jumpVector[0] * 0.3, 0.4, this.#team === 1 ? -0.3 : 0.3]);
 
             const heightDiff = this.#ball.position.y - this.position.y;
             const requiredJumpForce = Math.sqrt(2 * EntityManager.getInstance.gravity * (heightDiff + 0.5));
@@ -171,16 +171,17 @@ class Player {
 
     public async handleJump(jumpVelocity: number = 0, rotation: number = -1) {
         if (this.#isMainPlayer) {
+            const jumpPayload = this.#calculateJumpPayload();
+            if (jumpPayload.rotation !== -1) {
+                this.gltfResult.scene.rotation.y = jumpPayload.rotation;
+            }
+
             const jumpMagnitude = 0.42;
             const dX = Math.sin(this.gltfResult.scene.rotation.y) * jumpMagnitude;
             const dZ = Math.cos(this.gltfResult.scene.rotation.y) * jumpMagnitude;
 
             this.updatePositionDeltas({ x: dX, y: 0, z: dZ });
 
-            const jumpPayload = this.#calculateJumpPayload();
-            if (jumpPayload.rotation !== -1) {
-                this.gltfResult.scene.rotation.y = jumpPayload.rotation;
-            }
 
             this.#socket.emit("client_jump", jumpPayload);
         } else {

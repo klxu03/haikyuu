@@ -55,12 +55,13 @@ class Ball {
             // wait 8 seconds before resetting the initial position
             setTimeout(() => {
                 this.#initialPosition = { x: 0, y: 3, z: 2 };
+                this.#lastCollision = Date.now();
             }, 8000);
         }
 
         this.#ball.position.set(newPosition.x, newPosition.y, newPosition.z);
 
-        console.log("new ball position", newPosition);
+        console.log("new ball position", newPosition, elapsedTime);
     }
 
     public updateVelocity(velocity: [number, number, number]) {
