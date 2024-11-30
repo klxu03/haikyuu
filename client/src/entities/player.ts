@@ -246,6 +246,21 @@ class Player {
             this.updatePositionDeltas({ x: moveX, z: moveZ });
         }
 
+
+        if (this.position.y <= this.#groundHeight) {
+            console.log("on ground");
+            // continue
+        } else if (this.position.y - this.#groundHeight <= -this.#jumpVelocity) {
+            const yDelta = -(this.position.y - this.#groundHeight); // delta to hit ground
+            this.updatePositionDeltas({ y: yDelta });
+            console.log("hit ground with yDelta", yDelta);
+        } else {
+            this.updatePositionDeltas({ y: this.#jumpVelocity });
+            console.log("old jumpVelocity", this.#jumpVelocity);
+            this.#jumpVelocity -= EntityManager.getInstance.gravity;
+            console.log("new jumpVelocity", this.#jumpVelocity, "gravity", EntityManager.getInstance.gravity);
+        }
+
         if (changedPosition) {
             this.gltfResult.scene.position.set(this.position.x, this.position.y, this.position.z);
         }
@@ -290,9 +305,12 @@ class Player {
 
             if (this.#jumpTime > 0.75 && this.position.y - this.#groundHeight <= -this.#jumpVelocity) {
                 this.updatePositionDeltas({ y: -(this.position.y - this.#groundHeight) });
+                this.#jumpVelocity = 0;
             } else {
                 this.updatePositionDeltas({ y: this.#jumpVelocity });
+                console.log("old jumpVelocity", this.#jumpVelocity);
                 this.#jumpVelocity -= EntityManager.getInstance.gravity;
+                console.log("new jumpVelocity", this.#jumpVelocity);
             }
         }
 

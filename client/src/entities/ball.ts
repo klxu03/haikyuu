@@ -61,7 +61,7 @@ class Ball {
 
         this.#ball.position.set(newPosition.x, newPosition.y, newPosition.z);
 
-        console.log("new ball position", newPosition, elapsedTime);
+        // console.log("new ball position", newPosition, elapsedTime);
     }
 
     public updateVelocity(velocity: [number, number, number]) {
